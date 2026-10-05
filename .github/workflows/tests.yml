@@ -1,0 +1,43 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Python tests
+        run: |
+          for t in tests/test_*.py; do
+            echo "::group::$t"
+            python "$t" || exit 1
+            echo "::endgroup::"
+          done
+      - name: Card dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Card type check
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Card tests
+        working-directory: frontend
+        run: npm test
+      # The card is served from custom_components/swedish_hockey/www/, which
+      # HACS installs as it is committed -- so the committed file must be
+      # exactly what the source builds to.
+      - name: Committed card matches the source
+        working-directory: frontend
+        run: |
+          npm run build
+          git diff --exit-code -- ../custom_components/swedish_hockey/www/hockey-match-card.js
