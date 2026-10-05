@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import (
@@ -32,10 +34,31 @@ PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR, Platform.SWITCH
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+# The Lovelace card and badge live in this integration's own www/ folder
+# rather than in /config/www, so they travel with the component. That means
+# serving them ourselves: nothing outside /config/www is web-accessible by
+# default. Add /swedish_hockey/frontend/hockey-match-card.js as a dashboard
+# resource (JavaScript module) to use them.
+FRONTEND_URL = f"/{DOMAIN}/frontend"
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration's services."""
+    """Register the integration's services and serve its card."""
     async_setup_services(hass)
+    # Once per Home Assistant run, which async_setup is: registering the same
+    # path twice raises.
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                FRONTEND_URL,
+                str(Path(__file__).parent / "www"),
+                # The card is rebuilt in place during development; a cached
+                # copy of yesterday's card is a confusing thing to debug. The
+                # dashboard resource's ?v= is what browsers cache by.
+                False,
+            )
+        ]
+    )
     return True
 
 

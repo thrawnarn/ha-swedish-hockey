@@ -5,10 +5,13 @@
     "@thrawnarn"
   ],
   "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/thrawnarn/swedish-hockey",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/thrawnarn/swedish-hockey/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

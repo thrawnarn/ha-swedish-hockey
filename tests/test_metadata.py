@@ -70,4 +70,13 @@ for service in services:
 stale = set(strings.get("services", {})) - set(services)
 check("no strings for services that no longer exist", not stale, stale)
 
+# --- the card the integration serves ---------------------------------------
+card = os.path.join(COMP, "www", "hockey-match-card.js")
+check("the built card is in www/, which the integration serves", os.path.isfile(card))
+head = open(card, encoding="utf-8").read(300) if os.path.isfile(card) else ""
+check("it is the build, not a hand-edited file", "GENERATED from frontend/src" in head)
+init = open(os.path.join(COMP, "__init__.py"), encoding="utf-8").read()
+check("__init__ serves www/ at /swedish_hockey/frontend", 'f"/{DOMAIN}/frontend"' in init and '"www"' in init)
+check("http, which serves it, is a dependency", "http" in manifest.get("dependencies", []))
+
 done()
