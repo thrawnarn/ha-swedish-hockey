@@ -1,11 +1,14 @@
 {
   "domain": "swedish_hockey",
   "name": "Svensk hockey",
-  "codeowners": [],
+  "codeowners": [
+    "@thrawnarn"
+  ],
   "config_flow": true,
-  "documentation": "https://www.shl.se/game-schedule",
+  "documentation": "https://github.com/thrawnarn/swedish-hockey",
   "integration_type": "service",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/thrawnarn/swedish-hockey/issues",
   "requirements": [],
   "version": "1.0.0"
 }
