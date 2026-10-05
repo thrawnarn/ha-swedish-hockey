@@ -1,0 +1,11 @@
+{
+  "domain": "swedish_hockey",
+  "name": "Svensk hockey",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://www.shl.se/game-schedule",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}

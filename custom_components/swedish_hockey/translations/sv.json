@@ -1,0 +1,343 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Svensk hockey",
+        "description": "Välj vilken serie du vill ha matchkalendrar för.",
+        "data": {
+          "league": "Serie"
+        }
+      },
+      "teams": {
+        "title": "Lag i {league}",
+        "description": "Välj ett eller flera lag att följa. Varje lag får en egen kalender med hela säsongen. En kalender med seriens alla matcher skapas också, men är inaktiverad från början.",
+        "data": {
+          "teams": "Lag"
+        }
+      }
+    },
+    "error": {
+      "no_teams": "Välj minst ett lag."
+    },
+    "abort": {
+      "already_configured": "Serien är redan tillagd. Lägg till fler lag under dess inställningar i stället.",
+      "cannot_connect": "Kunde inte hämta seriens spelschema. Försök igen senare."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lag och matchlängd",
+        "description": "Ändra vilka lag du följer, och hur lång en match antas vara. Kalendern med seriens alla matcher kan aktiveras under entitetens inställningar.",
+        "data": {
+          "teams": "Lag",
+          "game_duration": "Matchlängd",
+          "live_interval": "Uppdateringsintervall live"
+        },
+        "data_description": {
+          "game_duration": "Används som sluttid för varje kalenderpost. En hockeymatch tar normalt cirka 150 minuter inklusive pauser.",
+          "live_interval": "Hur ofta en pågående match läses om. Seriens egen sajt använder 60 sekunder."
+        }
+      }
+    },
+    "error": {
+      "no_teams": "Välj minst ett lag."
+    },
+    "abort": {
+      "cannot_connect": "Kunde inte hämta seriens spelschema. Försök igen senare."
+    }
+  },
+  "entity": {
+    "switch": {
+      "live_scoring": {
+        "name": "Livescore"
+      }
+    },
+    "sensor": {
+      "next_game": {
+        "name": "Nästa match"
+      },
+      "live_score": {
+        "name": "Livescore"
+      },
+      "home_score": {
+        "name": "Hemmamål"
+      },
+      "away_score": {
+        "name": "Bortamål"
+      },
+      "period": {
+        "name": "Period"
+      },
+      "standing": {
+        "name": "Placering"
+      },
+      "highlights": {
+        "name": "Highlights"
+      }
+    },
+    "calendar": {
+      "games": {
+        "name": "Matcher"
+      },
+      "all_games": {
+        "name": "Alla matcher"
+      }
+    }
+  },
+  "services": {
+    "get_standings": {
+      "name": "Tabell",
+      "description": "Hämtar aktuell tabell för en serie. Pågående matcher räknas in så länge live inte stängs av.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie tabellen gäller."
+        },
+        "live": {
+          "name": "Livetabell",
+          "description": "Räkna in matcherna som spelas just nu. På som standard när det pågår matcher; stäng av för den officiella tabellen."
+        }
+      }
+    },
+    "get_game": {
+      "name": "Aktuell eller nästa match",
+      "description": "Hämtar lagets pågående eller nästa match.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        }
+      }
+    },
+    "get_play_by_play": {
+      "name": "Livematch",
+      "description": "Hämtar matchläge och mål för lagets pågående match.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        }
+      }
+    },
+    "get_highlights": {
+      "name": "Highlights",
+      "description": "Hämtar highlightsklipp för ett lag, nyast först.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        }
+      }
+    },
+    "get_results": {
+      "name": "Resultat",
+      "description": "Hämtar lagets spelade matcher, senaste först.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        },
+        "limit": {
+          "name": "Antal",
+          "description": "Hur många matcher som ska hämtas, senaste först."
+        },
+        "highlights": {
+          "name": "Höjdpunkter",
+          "description": "Matcha varje spelad match mot ligans highlightsklipp."
+        }
+      }
+    },
+    "get_recap": {
+      "name": "Hämta sammanfattning",
+      "description": "Sammanfattar lagets senaste match: resultat, mål, skott och placering i tabellen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        },
+        "game_id": {
+          "name": "Match",
+          "description": "Vilken match som ska sammanfattas. Standard är den senast spelade."
+        }
+      }
+    },
+    "get_schedule": {
+      "name": "Hämta spelschema",
+      "description": "Returnerar seriens återstående matcher, alla lag.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "limit": {
+          "name": "Antal",
+          "description": "Hur många matcher som ska returneras. Standard är 20."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Begränsa till ett lag. Lämna tomt för hela serien."
+        },
+        "before": {
+          "name": "Spelade matcher före",
+          "description": "Hur många redan spelade matcher som ska tas med före nästa. Standard är inga."
+        },
+        "highlights": {
+          "name": "Höjdpunkter",
+          "description": "Matcha varje spelad match mot ligans highlightsklipp."
+        }
+      }
+    },
+    "get_player": {
+      "name": "Hämta spelare",
+      "description": "Returnerar en spelares statistik för säsongen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        },
+        "player": {
+          "name": "Spelare",
+          "description": "Spelarens namn, med eller utan tröjnummer."
+        }
+      }
+    },
+    "get_roster": {
+      "name": "Hämta trupp",
+      "description": "Returnerar alla spelare som spelat för laget den här säsongen, med statistik.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        }
+      }
+    },
+    "get_form_table": {
+      "name": "Hämta formtabell",
+      "description": "Returnerar tabellen över lagens senaste matcher.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "last": {
+          "name": "Matcher",
+          "description": "Hur många av varje lags senaste matcher som räknas."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Markera det här lagets rad som ditt eget."
+        }
+      }
+    },
+    "get_live": {
+      "name": "Hämta pågående matcher",
+      "description": "Returnerar kvällens matcher med ställningen just nu, hämtad när du frågar.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "date": {
+          "name": "Datum",
+          "description": "Vilken dag som ska visas. Utelämnat blir det idag med liveresultat; andra dagar hämtas ur spelschemat."
+        }
+      }
+    },
+    "get_statistics": {
+      "name": "Hämta statistik",
+      "description": "Ligans statistik för alla utespelare, målvakter och lag: poäng, skott, powerplay, tekningar, räddningsprocent, publik med mera.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Liga",
+          "description": "Vilken liga som ska läsas."
+        },
+        "location": {
+          "name": "Matcher",
+          "description": "Alla matcher, eller bara hemma- eller bortamatcher."
+        },
+        "last": {
+          "name": "Senaste matcherna",
+          "description": "Räkna bara de senaste matcherna. Endast Hockeyallsvenskan."
+        }
+      }
+    },
+    "set_goal_reference": {
+      "name": "Spara referens till mål",
+      "description": "Kommer ihåg vad som skickades för ett mål, t.ex. ett Telegram-meddelande-id. Händelsen swedish_hockey_goal_updated skickar tillbaka det så att meddelandet kan redigeras.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        },
+        "game_id": {
+          "name": "Match",
+          "description": "game_id från händelsen swedish_hockey_goal."
+        },
+        "score": {
+          "name": "Ställning",
+          "description": "Ställningen målet gav, från händelsen swedish_hockey_goal."
+        },
+        "reference": {
+          "name": "Referens",
+          "description": "Vad som ska skickas tillbaka i swedish_hockey_goal_updated, t.ex. ett meddelande-id."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {
+      "message": "Ingen serie med id {entry} finns i Svensk hockey."
+    },
+    "entry_not_loaded": {
+      "message": "Serien {entry} är inte laddad."
+    },
+    "unknown_team": {
+      "message": "{league} har inget lag som heter {team}. Kända lag: {teams}."
+    },
+    "no_game": {
+      "message": "{team} har ingen kommande match."
+    }
+  },
+  "selector": {
+    "location": {
+      "options": {
+        "all": "Alla matcher",
+        "home": "Hemma",
+        "away": "Borta"
+      }
+    }
+  }
+}

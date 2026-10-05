@@ -1,0 +1,343 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Svensk hockey",
+        "description": "Choose the league you want match calendars for.",
+        "data": {
+          "league": "League"
+        }
+      },
+      "teams": {
+        "title": "Teams in {league}",
+        "description": "Pick one or more teams to follow. Each team gets its own calendar with the full season. A calendar with every game in the league is created too, but is disabled by default.",
+        "data": {
+          "teams": "Teams"
+        }
+      }
+    },
+    "error": {
+      "no_teams": "Pick at least one team."
+    },
+    "abort": {
+      "already_configured": "This league is already set up. Add more teams from its options instead.",
+      "cannot_connect": "Could not reach the league's schedule. Try again later."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Teams and match length",
+        "description": "Change which teams you follow, and how long a match is assumed to last. The league-wide calendar with every game can be enabled from its entity settings.",
+        "data": {
+          "teams": "Teams",
+          "game_duration": "Match length",
+          "live_interval": "Live poll interval"
+        },
+        "data_description": {
+          "game_duration": "Used as the end time of each calendar entry. A hockey match normally takes about 150 minutes including intermissions.",
+          "live_interval": "How often to re-read a game in progress. The league's own site uses 60 seconds."
+        }
+      }
+    },
+    "error": {
+      "no_teams": "Pick at least one team."
+    },
+    "abort": {
+      "cannot_connect": "Could not reach the league's schedule. Try again later."
+    }
+  },
+  "entity": {
+    "switch": {
+      "live_scoring": {
+        "name": "Live scoring"
+      }
+    },
+    "sensor": {
+      "next_game": {
+        "name": "Next game"
+      },
+      "live_score": {
+        "name": "Live score"
+      },
+      "home_score": {
+        "name": "Home goals"
+      },
+      "away_score": {
+        "name": "Away goals"
+      },
+      "period": {
+        "name": "Period"
+      },
+      "standing": {
+        "name": "League position"
+      },
+      "highlights": {
+        "name": "Highlights"
+      }
+    },
+    "calendar": {
+      "games": {
+        "name": "Games"
+      },
+      "all_games": {
+        "name": "All games"
+      }
+    }
+  },
+  "services": {
+    "get_standings": {
+      "name": "League table",
+      "description": "Return the current table for a league. While games are being played the table counts them in unless live is turned off.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league to read the table for."
+        },
+        "live": {
+          "name": "Live table",
+          "description": "Count the games being played into the table. On by default whenever any are running; turn off for the published table."
+        }
+      }
+    },
+    "get_game": {
+      "name": "Current or next game",
+      "description": "Return a team's current or next game.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        }
+      }
+    },
+    "get_play_by_play": {
+      "name": "Live game",
+      "description": "Return the live state and goals of a team's current game.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        }
+      }
+    },
+    "get_highlights": {
+      "name": "Highlights",
+      "description": "Return highlight clips for a team, newest first.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        }
+      }
+    },
+    "get_results": {
+      "name": "Results",
+      "description": "Return a team's played games, most recent first.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "How many games to return, newest first."
+        },
+        "highlights": {
+          "name": "Highlights",
+          "description": "Match each played game against the league's highlight clips."
+        }
+      }
+    },
+    "get_recap": {
+      "name": "Get recap",
+      "description": "Return a summary of the team's most recent game: score, goals, shots and where it left them in the table.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        },
+        "game_id": {
+          "name": "Game",
+          "description": "Which game to recap. Defaults to the most recent one played."
+        }
+      }
+    },
+    "get_schedule": {
+      "name": "Get schedule",
+      "description": "Return the league's remaining games, every team included.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "How many games to return. Defaults to 20."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Limit to one team. Leave empty for the whole league."
+        },
+        "before": {
+          "name": "Played games before",
+          "description": "How many games already played to include before the next one. None by default."
+        },
+        "highlights": {
+          "name": "Highlights",
+          "description": "Match each played game against the league's highlight clips."
+        }
+      }
+    },
+    "get_player": {
+      "name": "Get player",
+      "description": "Return a player's statistics for the season so far.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        },
+        "player": {
+          "name": "Player",
+          "description": "The player's name, with or without the shirt number."
+        }
+      }
+    },
+    "get_roster": {
+      "name": "Get roster",
+      "description": "Return every player who has turned out for a team this season, with their statistics.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        }
+      }
+    },
+    "get_form_table": {
+      "name": "Get form table",
+      "description": "Return the table over each club's last few games.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "last": {
+          "name": "Games",
+          "description": "How many of each club's most recent games to count."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Mark this club's row as your own."
+        }
+      }
+    },
+    "get_live": {
+      "name": "Get live games",
+      "description": "Return tonight's games with the score as it stands, read when asked for.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "date": {
+          "name": "Date",
+          "description": "The day to list. Left out, today with live scores; another day comes from the schedule."
+        }
+      }
+    },
+    "get_statistics": {
+      "name": "Get statistics",
+      "description": "Return the league's statistics for every skater, goalkeeper and club: points, shots, power play, face-offs, save percentage, attendance and more.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league to read."
+        },
+        "location": {
+          "name": "Games",
+          "description": "Every game, or only home or away games."
+        },
+        "last": {
+          "name": "Last games",
+          "description": "Count only each one's most recent games. Hockeyallsvenskan only."
+        }
+      }
+    },
+    "set_goal_reference": {
+      "name": "Set goal reference",
+      "description": "Remember what was sent for a goal, such as a Telegram message id. The swedish_hockey_goal_updated event hands it back so the message can be edited.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        },
+        "game_id": {
+          "name": "Game",
+          "description": "The game_id from the swedish_hockey_goal event."
+        },
+        "score": {
+          "name": "Score",
+          "description": "The score the goal made, from the swedish_hockey_goal event."
+        },
+        "reference": {
+          "name": "Reference",
+          "description": "What to hand back in swedish_hockey_goal_updated, for example a message id."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {
+      "message": "No Svensk hockey league with id {entry}."
+    },
+    "entry_not_loaded": {
+      "message": "The league {entry} is not loaded."
+    },
+    "unknown_team": {
+      "message": "{league} has no team called {team}. Known teams: {teams}."
+    },
+    "no_game": {
+      "message": "{team} has no upcoming game."
+    }
+  },
+  "selector": {
+    "location": {
+      "options": {
+        "all": "All games",
+        "home": "Home",
+        "away": "Away"
+      }
+    }
+  }
+}

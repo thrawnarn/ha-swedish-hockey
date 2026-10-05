@@ -1,0 +1,248 @@
+get_standings:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    live:
+      required: false
+      example: false
+      selector:
+        boolean:
+
+get_game:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+
+get_play_by_play:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+
+get_highlights:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+
+get_recap:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+    game_id:
+      required: false
+      example: q04k2qjt9hvekq51j3cwn8gz
+      selector:
+        text:
+
+get_schedule:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: false
+      example: LIF
+      selector:
+        text:
+    before:
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 400
+          mode: box
+    highlights:
+      required: false
+      default: false
+      selector:
+        boolean:
+    limit:
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 200
+          mode: box
+
+get_player:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+    player:
+      required: true
+      example: Oskar Lang
+      selector:
+        text:
+
+get_roster:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+
+get_form_table:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    last:
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 82
+          mode: box
+    team:
+      required: false
+      example: LIF
+      selector:
+        text:
+
+get_live:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    date:
+      required: false
+      example: "2026-10-03"
+      selector:
+        date:
+
+get_results:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+    highlights:
+      required: false
+      default: false
+      selector:
+        boolean:
+    limit:
+      required: false
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+
+get_statistics:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    location:
+      required: false
+      default: all
+      selector:
+        select:
+          options:
+            - all
+            - home
+            - away
+          translation_key: location
+    last:
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 1
+          max: 82
+          mode: box
+
+set_goal_reference:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+    game_id:
+      required: true
+      example: "{{ trigger.event.data.game_id }}"
+      selector:
+        text:
+    score:
+      required: true
+      example: "{{ trigger.event.data.score }}"
+      selector:
+        text:
+    reference:
+      required: true
+      example: "{{ sent.chats[0].message_id }}"
+      selector:
+        text:
