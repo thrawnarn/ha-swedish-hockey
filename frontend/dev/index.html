@@ -1,0 +1,138 @@
+<!doctype html>
+<!--
+  The card in a browser, against the made-up league the tests use.
+
+    cd frontend && node build.mjs --test && python3 -m http.server 8123
+    open http://localhost:8123/dev/?scene=schedule
+
+  Scenes: face, live, result, badge, table, today, schedule, stats, skaters,
+  team, roster, recap, player, game, loading. Add &theme=light for the light
+  theme, and use the browser's device toolbar for a phone's width (390 px).
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>hockey-match-card</title>
+<style>
+  html, body { margin: 0; font-family: Roboto, Arial, sans-serif; font-size: 14px; }
+  body {
+    padding: 12px;
+    background: #111;
+    color: #e1e1e1;
+    --primary-color: #03a9f4;
+    --card-background-color: #1c1c1c;
+    --ha-card-background: #1c1c1c;
+    --secondary-background-color: #282828;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --divider-color: rgba(225, 225, 225, 0.12);
+    --error-color: #db4437;
+    --text-primary-color: #fff;
+  }
+  body.light {
+    background: #fafafa;
+    --card-background-color: #fff;
+    --ha-card-background: #fff;
+    --secondary-background-color: #f0f0f0;
+    --primary-text-color: #212121;
+    --secondary-text-color: #727272;
+    --divider-color: rgba(0, 0, 0, 0.12);
+  }
+</style>
+<script type="module">
+  import * as F from "../test/fixture.mjs";
+
+  // The fixture's clock, so "today" is the fixture's today.
+  const FIXED = F.NOW.getTime();
+  const Real = Date;
+  window.Date = class extends Real {
+    constructor(...args) { if (args.length === 0) super(FIXED); else super(...args); }
+    static now() { return FIXED; }
+  };
+
+  // Stand-ins for Home Assistant's own elements: an icon is its name's first
+  // letter, a card is a box.
+  customElements.define("ha-card", class extends HTMLElement {});
+  customElements.define("ha-icon", class extends HTMLElement {
+    static get observedAttributes() { return ["icon"]; }
+    connectedCallback() { this.paint(); }
+    attributeChangedCallback() { this.paint(); }
+    paint() {
+      const name = (this.getAttribute("icon") || "").replace("mdi:", "");
+      this.textContent = name ? name[0].toUpperCase() : "•";
+      Object.assign(this.style, {
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: "var(--mdc-icon-size, 24px)", height: "var(--mdc-icon-size, 24px)",
+        fontSize: "calc(var(--mdc-icon-size, 24px) * 0.6)",
+      });
+    }
+  });
+  // Crests drawn from their club code.
+  const crest = (code) => {
+    const club = F.CLUBS.find((c) => c.code === code);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 2 L36 8 V20 C36 30 28 36 20 38 C12 36 4 30 4 20 V8 Z" fill="${club?.color ?? "#555"}" stroke="#fff" stroke-width="2"/><text x="20" y="25" font-size="11" text-anchor="middle" fill="#fff" font-family="Arial" font-weight="bold">${code}</text></svg>`;
+    return "data:image/svg+xml," + encodeURIComponent(svg);
+  };
+  const withCrests = (value) =>
+    JSON.parse(JSON.stringify(value), (key, v) =>
+      typeof v === "string" && v.startsWith("/crests/") ? crest(v.slice(8, -4)) : v);
+
+  await import("../.cache/hockey-match-card.js");
+
+  const params = new URLSearchParams(location.search);
+  const scene = params.get("scene") || "face";
+  if (params.get("theme") === "light") document.body.classList.add("light");
+
+  const last = F.ourGames().filter((g) => g.home_score !== null).at(-1);
+  const states = F.sensors({
+    live: ["live", "game"].includes(scene) ? F.liveSensor() : null,
+    lastResult: scene === "result" ? { ...F.resultOf(last), ended_at: new Date(Date.now() - 3600e3).toISOString() } : null,
+  });
+  const full = {};
+  for (const [id, s] of Object.entries(withCrests(states))) full[id] = { entity_id: id, ...s };
+  const services = F.services();
+  const hass = {
+    states: full,
+    entities: F.REGISTRY.entities,
+    devices: F.REGISTRY.devices,
+    locale: { language: "sv", time_format: "24" },
+    async callWS() { return {}; },
+    async callService(domain, service, data) {
+      if (scene === "loading") return new Promise(() => {});
+      await new Promise((r) => setTimeout(r, 300));
+      return { response: withCrests(services[service]?.(data) ?? {}) };
+    },
+  };
+
+  const badge = scene === "badge";
+  const card = document.createElement(badge ? "hockey-match-badge" : "hockey-match-card");
+  card.setConfig({ type: `custom:${card.localName}`, team: badge ? F.OURS.code : "Norrby" });
+  card.hass = hass;
+  document.body.appendChild(card);
+  await card.updateComplete;
+
+  const ctl = card.ctl;
+  const row = F.TABLE[0];
+  const go = {
+    table: () => ctl.openTab("table"),
+    today: () => ctl.openTab("today"),
+    schedule: () => ctl.openTab("schedule"),
+    stats: () => ctl.openTab("stats"),
+    skaters: () => { ctl.openTab("stats"); ctl.setStats({ section: "skaters" }); },
+    team: () => ctl.openTeamByCode(row.team_code, row.team, row.logo),
+    roster: async () => {
+      ctl.openTeamByCode(row.team_code, row.team, row.logo);
+      await ctl.settled();
+      ctl.openTeamTab("roster");
+    },
+    recap: () => { ctl.openTab("schedule"); ctl.loadRecap({ game_id: last.game_id }, F.OURS.code); },
+    player: () => { ctl.openTab("stats"); ctl.openPlayer("Ada Berg", F.OURS.code); },
+    game: () => ctl.openTab("game"),
+    loading: () => ctl.openTab("schedule"),
+  };
+  go[scene]?.();
+</script>
+</head>
+<body></body>
+</html>

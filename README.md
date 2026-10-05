@@ -163,7 +163,9 @@ and then edit that message rather than send a second one.
 ```
 custom_components/swedish_hockey/   the integration
   www/hockey-match-card.js          the built card (generated, committed)
+  brand/                            the icon (rendered from assets/icon.svg)
 frontend/                           the card's TypeScript source
+  dev/index.html                    the card in a browser, against made-up data
 tests/                              the integration's tests
 ```
 

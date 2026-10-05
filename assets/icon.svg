@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Svensk hockey: two crossed sticks over a puck, in the flag's blue and yellow. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1D6FD1"/>
+      <stop offset="1" stop-color="#0B3A82"/>
+    </linearGradient>
+    <linearGradient id="puck" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2B2F36"/>
+      <stop offset="1" stop-color="#0E1014"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#tile)"/>
+  <!-- Sticks: a shaft and a blade each, mirrored. -->
+  <g fill="#FECC02" stroke="#0B3A82" stroke-width="6" stroke-linejoin="round">
+    <path d="M150 92 L182 78 L330 338 L392 352 Q412 357 404 378 L398 392 L310 372 Q296 369 290 357 Z"/>
+    <path d="M362 92 L330 78 L182 338 L120 352 Q100 357 108 378 L114 392 L202 372 Q216 369 222 357 Z"/>
+  </g>
+  <!-- The puck, below where the sticks cross. -->
+  <ellipse cx="256" cy="414" rx="58" ry="20" fill="#0E1014"/>
+  <rect x="198" y="380" width="116" height="34" fill="url(#puck)"/>
+  <ellipse cx="256" cy="380" rx="58" ry="20" fill="#3A3F48"/>
+</svg>

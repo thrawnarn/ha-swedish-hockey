@@ -19,6 +19,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # No brand icon yet: HACS looks for one in home-assistant/brands,
-          # and HA 2026.3+ would take one from custom_components/<domain>/brand/.
+          # The icon ships in custom_components/swedish_hockey/brand/ (HA
+          # 2026.3+), which the HACS brands check does not look for yet.
           ignore: brands

@@ -55,9 +55,18 @@ pure modules), never the served file.
 
 ## Looking at it
 
-The tests check behaviour, not looks. For a visual change, render the card in
-headless Chromium against real or made-up data and look at a screenshot at
-phone width (390 px) and desktop width. Chromium's `--window-size` will not go
+The tests check behaviour, not looks. `frontend/dev/index.html` puts the card
+in a browser against the made-up league:
+
+```sh
+cd frontend && node build.mjs --test && python3 -m http.server 8123
+# http://localhost:8123/dev/?scene=schedule   (face, live, result, badge,
+# table, today, schedule, stats, skaters, team, roster, recap, player, game,
+# loading; &theme=light)
+```
+
+For a visual change, look at a screenshot at phone width (390 px) and at
+desktop width. Chromium's `--window-size` will not go
 below 500 px, so put the page in a 390 px iframe, or drive it over the
 DevTools protocol with `Emulation.setDeviceMetricsOverride`. Don't trust
 `--virtual-time-budget` for anything that depends on `<dialog>` close events.
