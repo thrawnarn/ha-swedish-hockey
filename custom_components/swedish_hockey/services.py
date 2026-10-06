@@ -25,7 +25,9 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import ConfigEntrySelector
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .api import (
@@ -39,13 +41,22 @@ from .api import (
     parse_score,
     season_year,
 )
+from .archive import (
+    DEFAULT_SEASONS,
+    MAX_SEASONS,
+    STORE_VERSION as ARCHIVE_STORE_VERSION,
+    Archive,
+    page_reader,
+)
 from .const import (
     CONF_GAME_DURATION,
     DEFAULT_GAME_DURATION,
     DOMAIN,
+    FORM_GAMES,
     LIVE_WINDOW_AFTER,
     LIVE_WINDOW_BEFORE,
 )
+from .matchup import head_to_head, meetings, team_summary
 from .stats import game_stats
 from .coordinator import (
     SwedishHockeyConfigEntry,
@@ -72,6 +83,8 @@ SERVICE_GET_LIVE = "get_live"
 SERVICE_GET_RESULTS = "get_results"
 SERVICE_GET_STATISTICS = "get_statistics"
 SERVICE_SET_GOAL_REFERENCE = "set_goal_reference"
+SERVICE_GET_MATCHUP = "get_matchup"
+SERVICE_GET_HEAD_TO_HEAD = "get_head_to_head"
 
 ATTR_LIMIT = "limit"
 ATTR_GAME_ID = "game_id"
@@ -84,6 +97,8 @@ ATTR_SCORE = "score"
 ATTR_DATE = "date"
 ATTR_REFERENCE = "reference"
 ATTR_LOCATION = "location"
+ATTR_OPPONENT = "opponent"
+ATTR_SEASONS = "seasons"
 
 _ENTRY_SCHEMA = vol.Schema(
     {
@@ -129,6 +144,23 @@ _STATISTICS_SCHEMA = _ENTRY_SCHEMA.extend(
         vol.Optional(ATTR_LAST): vol.All(int, vol.Range(min=1, max=82)),
     }
 )
+# A game by its id - what a card has from a fixture row - or the next meeting
+# between two clubs, which is what a person asks for.
+_MATCHUP_SCHEMA = _ENTRY_SCHEMA.extend(
+    {
+        vol.Optional(ATTR_GAME_ID): cv.string,
+        vol.Optional(ATTR_TEAM): cv.string,
+        vol.Optional(ATTR_OPPONENT): cv.string,
+    }
+)
+_HEAD_TO_HEAD_SCHEMA = _TEAM_SCHEMA.extend(
+    {
+        vol.Required(ATTR_OPPONENT): cv.string,
+        vol.Optional(ATTR_SEASONS, default=DEFAULT_SEASONS): vol.All(
+            int, vol.Range(min=1, max=MAX_SEASONS)
+        ),
+    }
+)
 _SCHEDULE_SCHEMA = _ENTRY_SCHEMA.extend(
     {
         vol.Optional(ATTR_LIMIT, default=20): vol.All(int, vol.Range(min=1, max=200)),
@@ -158,6 +190,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
         (SERVICE_GET_LIVE, _LIVE_SCHEMA, _async_get_live),
         (SERVICE_GET_RESULTS, _RESULTS_SCHEMA, _async_get_results),
         (SERVICE_GET_STATISTICS, _STATISTICS_SCHEMA, _async_get_statistics),
+        (SERVICE_GET_MATCHUP, _MATCHUP_SCHEMA, _async_get_matchup),
+        (SERVICE_GET_HEAD_TO_HEAD, _HEAD_TO_HEAD_SCHEMA, _async_get_head_to_head),
     ):
         hass.services.async_register(
             DOMAIN,
@@ -215,15 +249,20 @@ def _entry(call: ServiceCall) -> SwedishHockeyConfigEntry:
 
 def _team(entry: SwedishHockeyConfigEntry, call: ServiceCall) -> Team:
     """Resolve a team by its code or by name, however the caller spelled it."""
+    return _team_named(entry, str(call.data[ATTR_TEAM]))
+
+
+def _team_named(entry: SwedishHockeyConfigEntry, wanted: str) -> Team:
+    """Resolve a club in this league from any of its names."""
     data = entry.runtime_data.data
     teams = data.teams if data else {}
-    if (team := match_team(teams, str(call.data[ATTR_TEAM]))) is not None:
+    if (team := match_team(teams, wanted)) is not None:
         return team
     raise ServiceValidationError(
         translation_domain=DOMAIN,
         translation_key="unknown_team",
         translation_placeholders={
-            "team": str(call.data[ATTR_TEAM]),
+            "team": wanted,
             "league": entry.title,
             "teams": ", ".join(sorted(teams)),
         },
@@ -662,6 +701,150 @@ async def _async_get_schedule(call: ServiceCall) -> ServiceResponse:
             first_upcoming - offset if first_upcoming < len(games) else None
         ),
         "total_upcoming": len(games) - first_upcoming,
+    }
+
+
+async def _async_get_matchup(call: ServiceCall) -> ServiceResponse:
+    """Return two clubs before a game: standing, form, records and meetings.
+
+    Everything here is this season's and already in memory; earlier seasons'
+    meetings are get_head_to_head's, which has to read them from elsewhere.
+    """
+    entry = _entry(call)
+    data = entry.runtime_data.data
+    games = list(data.games if data else [])
+    if game_id := call.data.get(ATTR_GAME_ID):
+        game = data.game_for(game_id) if data else None
+        if game is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_game",
+                translation_placeholders={"game": game_id, "league": entry.title},
+            )
+    elif call.data.get(ATTR_TEAM) and call.data.get(ATTR_OPPONENT):
+        team = _team(entry, call)
+        opponent = _team_named(entry, str(call.data[ATTR_OPPONENT]))
+        between = meetings(games, team.key, opponent.key)
+        minutes = entry.options.get(CONF_GAME_DURATION, DEFAULT_GAME_DURATION)
+        now = dt_util.utcnow()
+        # The next time they meet; once they have met for the last time this
+        # season, the last time.
+        game = next(
+            (g for g in between if g.start + timedelta(minutes=minutes) > now),
+            between[-1] if between else None,
+        )
+        if game is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="no_meeting",
+                translation_placeholders={"team": team.name, "opponent": opponent.name},
+            )
+    else:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="matchup_needs_game"
+        )
+
+    def local_date(moment: Any) -> date:
+        return dt_util.as_local(moment).date()
+
+    rows = {
+        row["team_code"]: row
+        for row in table_rows(data, data.standings, form_games=FORM_GAMES)
+    } if data else {}
+    sides: dict[str, dict[str, Any]] = {}
+    for side, team in (("home", game.home), ("away", game.away)):
+        summary = team_summary(
+            games, team, game.start, local_date=local_date, form_games=FORM_GAMES
+        )
+        summary["standing"] = rows.get(team.key)
+        sides[side] = summary
+
+    between = meetings(games, game.home.key, game.away.key)
+    listed = [
+        dict(_fixture_dict(other), this_game=other.uid == game.uid) for other in between
+    ]
+    earlier = [
+        fixture
+        for other, fixture in zip(between, listed)
+        if other.has_result and other.start < game.start
+    ]
+    return {
+        "game": _fixture_dict(game),
+        "home": sides["home"],
+        "away": sides["away"],
+        "meetings": listed,
+        # This season's meetings so far, counted from the home side's view.
+        "head_to_head": head_to_head(earlier, game.home.key),
+        "table_source": data.standings_source if data else None,
+        "season": season_year(),
+    }
+
+
+def _archive(hass: HomeAssistant) -> Archive:
+    """Return the federation's archive, shared by every league entry."""
+    shared = hass.data.setdefault(DOMAIN, {})
+    archive = shared.get("archive")
+    if archive is None:
+        store: Store[dict[str, Any]] = Store(
+            hass, ARCHIVE_STORE_VERSION, f"{DOMAIN}.archive"
+        )
+        archive = Archive(
+            page_reader(async_get_clientsession(hass)),
+            store.async_load,
+            lambda data: store.async_delay_save(data, 30),
+        )
+        shared["archive"] = archive
+    return archive
+
+
+async def _async_get_head_to_head(call: ServiceCall) -> ServiceResponse:
+    """Return two clubs' meetings in earlier seasons, newest first.
+
+    From the federation's archive, which keeps both leagues: clubs go up and
+    down, so the last time two clubs met may have been in the other league.
+    This season's meetings are get_matchup's.
+    """
+    entry = _entry(call)
+    team = _team(entry, call)
+    opponent = _team_named(entry, str(call.data[ATTR_OPPONENT]))
+    try:
+        found, searched = await _archive(call.hass).async_meetings(
+            team, opponent, int(call.data.get(ATTR_SEASONS, DEFAULT_SEASONS))
+        )
+    except HockeyApiError as err:
+        raise ServiceValidationError(str(err)) from err
+
+    swedish = dt_util.get_time_zone("Europe/Stockholm")
+    listed = []
+    for game, team_at_home in found:
+        home, away = (team, opponent) if team_at_home else (opponent, team)
+        start = dt_util.parse_datetime(game.start)
+        listed.append(
+            {
+                "season": f"{game.season}-{str(game.season + 1)[2:]}",
+                "league": game.league,
+                "series": game.series,
+                # The archive writes Swedish local time.
+                "start": start.replace(tzinfo=swedish).isoformat() if start else game.start,
+                "home_team": home.name,
+                "away_team": away.name,
+                "home_code": home.key,
+                "away_code": away.key,
+                "home_logo": home.logo,
+                "away_logo": away.logo,
+                "home_color": home.color,
+                "away_color": away.color,
+                "home_score": game.home_score,
+                "away_score": game.away_score,
+                "decided_in": game.decided_in,
+                "venue": game.venue,
+                "attendance": game.attendance,
+            }
+        )
+    return {
+        "meetings": listed,
+        "seasons": searched,
+        "head_to_head": head_to_head(listed, team.key),
     }
 
 

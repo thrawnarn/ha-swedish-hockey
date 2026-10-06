@@ -8,6 +8,7 @@
  */
 
 import { html, LitElement, nothing, type PropertyValues } from "lit";
+import { onActivate } from "../base";
 import { DEFAULTS } from "../constants";
 import type { Ctx, Sources } from "../context";
 import { HockeyController } from "../controller";
@@ -19,6 +20,7 @@ import { badge } from "../parts/common";
 import {
   barButtons,
   footer,
+  nextGameOf,
   lastGoal,
   liveMiddle,
   nextMiddle,
@@ -158,13 +160,15 @@ export class HockeyMatchCard extends LitElement {
           ${badge(a.home_logo, "home-bg")} ${badge(a.away_logo, "away-bg")}
           <div class="content">
             ${sideButton(ctx, a.home_code, a.home_team, a.home_logo)}
-            <div class="middle">
-              ${isLive
+            ${this.middle(
+              ctx,
+              isLive
                 ? liveMiddle(ctx, live!)
                 : showResult
                   ? resultMiddle(ctx, lastResult, live)
-                  : nextMiddle(ctx, next)}
-            </div>
+                  : nextMiddle(ctx, next),
+              isLive || showResult ? null : nextGameOf(next),
+            )}
             ${sideButton(ctx, a.away_code, a.away_team, a.away_logo)}
           </div>
           ${isLive ? lastGoal(live!) : nothing}
@@ -172,6 +176,23 @@ export class HockeyMatchCard extends LitElement {
         ${footer(ctx, buttons)} ${this.dialog(ctx)}
       </ha-card>
     `;
+  }
+
+  // Between games the middle of the face is the next game, and a tap on it
+  // opens that game's preview.
+  private middle(ctx: Ctx, content: unknown, game: Row | null) {
+    if (!game) return html`<div class="middle">${content}</div>`;
+    const open = () => this.ctl.openPreview(game);
+    return html`<div
+      class="middle tappable"
+      role="button"
+      tabindex="0"
+      title="Inför matchen"
+      @click=${open}
+      @keydown=${onActivate(open)}
+    >
+      ${content}
+    </div>`;
   }
 
   private toggle(showingResult: boolean, resultId: string | null) {

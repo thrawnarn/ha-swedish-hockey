@@ -88,6 +88,7 @@ const STATE = [
   "stats",
   "statsData",
   "picker",
+  "preview",
 ] as const;
 
 export class HockeyController {
@@ -109,6 +110,9 @@ export class HockeyController {
   declare stats: StatsUi | null;
   declare statsData: Record<string, StatsEntry> | null;
   declare picker: string | null;
+  /** A game ahead, being previewed: the game it was opened on, what has been
+   *  read about it, and whether it went over a club's page or under one. */
+  declare preview: Row | null;
 
   /** The sensors of the team the card follows, found afresh each render. */
   ids: EntityIds = {};
@@ -117,6 +121,7 @@ export class HockeyController {
   private _request = 0;
   private _liveTimer: ReturnType<typeof setInterval> | null = null;
   private _entryId: string | undefined;
+  private _previewSeq = 0;
 
   constructor(readonly host: ControllerHost) {
     this._state.tableView = "table";
@@ -301,6 +306,7 @@ export class HockeyController {
     this.statsOpen = false;
     this.day = 0;
     this.picker = null;
+    this.preview = null;
   }
 
   openTab(id: string): void {
@@ -309,6 +315,7 @@ export class HockeyController {
     this.recap = null;
     this.team = null;
     this.player = null;
+    this.preview = null;
     if (id === "game") {
       this.panel = "game";
       return;
@@ -330,6 +337,7 @@ export class HockeyController {
     this.recap = null;
     this.team = null;
     this.player = null;
+    this.preview = null;
     // Live is a tab inside the table view, so the table stays one tap away.
     this.panel = (id === "live" ? "table" : id) as Panel;
     this.tableView = id === "live" ? "live" : "table";
@@ -621,6 +629,9 @@ export class HockeyController {
   // asked for the first time their own tab is opened.
   async openTeam(row: TableRow, tab = "overview"): Promise<void> {
     if (!row?.team_code) return;
+    // A club opened from a preview goes over it; back from the club comes
+    // back to the preview.
+    if (this.preview?.aboveTeam) this.preview = { ...this.preview, aboveTeam: false };
     const token = this.newRequest();
     this.team = { row, tab, loading: true };
     if (tab === "stats") this.loadStats("season");
@@ -755,6 +766,71 @@ export class HockeyController {
       ...this.team,
       sorts: { ...(this.team?.sorts ?? {}), [group]: { key, dir } },
     };
+  }
+
+  // ---- A game ahead -----------------------------------------------------------------
+
+  // Two clubs before they meet: this season's numbers are one quick read
+  // from what the integration holds; their meetings in earlier seasons come
+  // from the federation's archive, slower the first time, so they are asked
+  // for alongside and drawn when they come. The statistics for the season
+  // comparison are the Statistik tab's, read if the card has not got them.
+  //
+  // Replies are matched to the preview they were asked for rather than to the
+  // request stamp: going on to a club or a player from the preview stamps a
+  // new request, and the preview must still be whole when the reader comes
+  // back to it.
+  openPreview(game: Game): void {
+    if (!game?.game_id) return;
+    this.newRequest();
+    const id = ++this._previewSeq;
+    const current = () => this.preview?.id === id;
+    this.recap = null;
+    this.player = null;
+    this.panel = this.panel ?? "table";
+    this.preview = {
+      id,
+      game,
+      // Opened from a club's page, it goes over that page.
+      aboveTeam: Boolean(this.team),
+      loading: true,
+      history: { loading: true },
+    };
+    if (this.config.show_stats !== false) this.loadStats("season");
+
+    this.ask("get_matchup", { game_id: game.game_id })
+      .then((data) => {
+        if (current()) this.preview = { ...this.preview, loading: false, data };
+      })
+      .catch((err) => {
+        if (current()) this.preview = { ...this.preview, loading: false, error: errorText(err) };
+      });
+    this.ask("get_head_to_head", {
+      team: game.home_code,
+      opponent: game.away_code,
+      seasons: 5,
+    })
+      .then((data) => {
+        if (current()) this.preview = { ...this.preview, history: data ?? {} };
+      })
+      .catch((err) => {
+        if (current()) this.preview = { ...this.preview, history: { error: errorText(err) } };
+      });
+  }
+
+  closePreview(): void {
+    this.newRequest();
+    this.preview = null;
+  }
+
+  /** Whether the preview is what the dialog shows, rather than a club's page
+   *  opened over it. */
+  previewOnTop(): boolean {
+    return Boolean(this.preview && (!this.team || this.preview.aboveTeam));
+  }
+
+  setPreview(patch: Row): void {
+    if (this.preview) this.preview = { ...this.preview, ...patch };
   }
 
   // ---- A game's summary ----------------------------------------------------------

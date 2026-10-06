@@ -18,8 +18,9 @@ test("the schedule lists the season by day, our games marked, the next game flag
   assert.ok(next);
   assert.match(text(next), new RegExp(GAMES[NEXT_INDEX].home_team));
   assert.ok($(card, ".fixture-row.self"));
-  // Played games open their summary; games to come do not.
-  assert.equal($$(card, ".fixture-row.tappable").length, NEXT_INDEX);
+  // Played games open their summary, games to come their preview.
+  assert.equal($$(card, ".fixture-row.tappable").length, GAMES.length);
+  assert.equal($$(card, ".fixture-row.tappable[title='Inför matchen']").length, GAMES.length - NEXT_INDEX);
   // The scroll to the next game has been made and is not asked for again.
   assert.equal(card.ctl.schedule.scrollToNext, false);
   unmount(card);

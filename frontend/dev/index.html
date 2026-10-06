@@ -6,7 +6,7 @@
     open http://localhost:8123/dev/?scene=schedule
 
   Scenes: face, live, result, badge, table, today, schedule, stats, skaters,
-  team, roster, recap, player, game, loading. Add &theme=light for the light
+  team, roster, recap, player, preview, game, loading. Add &theme=light for the light
   theme, and use the browser's device toolbar for a phone's width (390 px).
 -->
 <html>
@@ -128,6 +128,7 @@
     },
     recap: () => { ctl.openTab("schedule"); ctl.loadRecap({ game_id: last.game_id }, F.OURS.code); },
     player: () => { ctl.openTab("stats"); ctl.openPlayer("Ada Berg", F.OURS.code); },
+    preview: () => ctl.openPreview(F.ourGames().find((g) => g.home_score === null)),
     game: () => ctl.openTab("game"),
     loading: () => ctl.openTab("schedule"),
   };

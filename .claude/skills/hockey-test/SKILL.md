@@ -29,6 +29,10 @@ from `custom_components/swedish_hockey/` as the package `sh`
 - `test_tv.py`: pairing tv.nu listings with games.
 - `test_metadata.py`: manifest, translations, services.yaml against strings,
   and that the served card is the build.
+- `test_card.py`: the dashboard resource the integration keeps.
+- `test_matchup.py`: form, records, runs, rest and meetings before a game.
+- `test_archive.py`: the federation archive's pages (made-up markup in the
+  site's shape) and the read-once store.
 
 A module that imports more of Home Assistant (coordinator, sensors) needs more
 stubs in `_rig.py`; add them there rather than per file.
@@ -61,8 +65,8 @@ in a browser against the made-up league:
 ```sh
 cd frontend && node build.mjs --test && python3 -m http.server 8123
 # http://localhost:8123/dev/?scene=schedule   (face, live, result, badge,
-# table, today, schedule, stats, skaters, team, roster, recap, player, game,
-# loading; &theme=light)
+# table, today, schedule, stats, skaters, team, roster, recap, player,
+# preview, game, loading; &theme=light)
 ```
 
 For a visual change, look at a screenshot at phone width (390 px) and at

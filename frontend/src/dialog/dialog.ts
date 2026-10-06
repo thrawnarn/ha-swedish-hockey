@@ -38,6 +38,7 @@ export class HockeyDialog extends PartElement {
       ctl.player ||
       ctl.recap ||
       ctl.team ||
+      ctl.preview ||
       ctl.panel === "events" ||
       ctl.panel === "results" ||
       ctl.panel === "game";
@@ -93,6 +94,9 @@ export class HockeyDialog extends PartElement {
     const { ctl } = ctx;
     if (ctl.player) return html`<hockey-player-view .ctx=${ctx}></hockey-player-view>`;
     if (ctl.recap) return html`<hockey-recap-view .ctx=${ctx}></hockey-recap-view>`;
+    // A preview and a club's page can be open together, one opened from the
+    // other: whichever came second is on top.
+    if (ctl.previewOnTop()) return html`<hockey-preview-view .ctx=${ctx}></hockey-preview-view>`;
     if (ctl.team) return html`<hockey-team-view .ctx=${ctx}></hockey-team-view>`;
     switch (ctl.panel) {
       case "game":
@@ -121,6 +125,7 @@ export class HockeyDialog extends PartElement {
       !ctl.team &&
       !ctl.player &&
       !ctl.recap &&
+      !ctl.preview &&
       (id === "game"
         ? ctl.panel === "game"
         : id === "today"

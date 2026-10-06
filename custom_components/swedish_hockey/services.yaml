@@ -246,3 +246,52 @@ set_goal_reference:
       example: "{{ sent.chats[0].message_id }}"
       selector:
         text:
+
+get_matchup:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    game_id:
+      required: false
+      example: q04k2qjt9hvekq51j3cwn8gz
+      selector:
+        text:
+    team:
+      required: false
+      example: LIF
+      selector:
+        text:
+    opponent:
+      required: false
+      example: MODO
+      selector:
+        text:
+
+get_head_to_head:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+    opponent:
+      required: true
+      example: MODO
+      selector:
+        text:
+    seasons:
+      required: false
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 15
+          mode: box

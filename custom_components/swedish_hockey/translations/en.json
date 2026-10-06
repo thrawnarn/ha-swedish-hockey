@@ -315,6 +315,50 @@
           "description": "What to hand back in swedish_hockey_goal_updated, for example a message id."
         }
       }
+    },
+    "get_matchup": {
+      "name": "Get matchup",
+      "description": "Return two clubs before a game: where each stands, their form overall, at home and away, their records, runs and rest, and their meetings this season.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the game is in."
+        },
+        "game_id": {
+          "name": "Game",
+          "description": "Which game. Leave it out and give a team and an opponent for their next meeting."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF. With an opponent, instead of a game."
+        },
+        "opponent": {
+          "name": "Opponent",
+          "description": "The other club, by code or name."
+        }
+      }
+    },
+    "get_head_to_head": {
+      "name": "Get head to head",
+      "description": "Return two clubs' meetings in earlier seasons, in either league, from the Swedish Ice Hockey Association's archive. This season's meetings are in Get matchup.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in now."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF."
+        },
+        "opponent": {
+          "name": "Opponent",
+          "description": "The other club, by code or name."
+        },
+        "seasons": {
+          "name": "Seasons",
+          "description": "How many finished seasons to look back over."
+        }
+      }
     }
   },
   "exceptions": {
@@ -329,6 +373,15 @@
     },
     "no_game": {
       "message": "{team} has no upcoming game."
+    },
+    "unknown_game": {
+      "message": "{league} has no game with id {game}."
+    },
+    "no_meeting": {
+      "message": "{team} and {opponent} do not meet this season."
+    },
+    "matchup_needs_game": {
+      "message": "Give a game, or a team and an opponent."
     }
   },
   "selector": {

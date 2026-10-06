@@ -315,6 +315,50 @@
           "description": "Vad som ska skickas tillbaka i swedish_hockey_goal_updated, t.ex. ett meddelande-id."
         }
       }
+    },
+    "get_matchup": {
+      "name": "Hämta matchinfo",
+      "description": "Två lag inför en match: placering i tabellen, form totalt, hemma och borta, facit, svit, vila och årets inbördes möten.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie matchen spelas i."
+        },
+        "game_id": {
+          "name": "Match",
+          "description": "Vilken match. Utelämna och ange lag och motståndare för deras nästa möte."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF. Tillsammans med motståndare, i stället för en match."
+        },
+        "opponent": {
+          "name": "Motståndare",
+          "description": "Det andra laget, med kod eller namn."
+        }
+      }
+    },
+    "get_head_to_head": {
+      "name": "Hämta inbördes möten",
+      "description": "Två lags möten under tidigare säsonger, i båda serierna, ur Svenska Ishockeyförbundets arkiv. Årets möten finns i Hämta matchinfo.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i nu."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF."
+        },
+        "opponent": {
+          "name": "Motståndare",
+          "description": "Det andra laget, med kod eller namn."
+        },
+        "seasons": {
+          "name": "Säsonger",
+          "description": "Hur många avslutade säsonger bakåt som ska sökas igenom."
+        }
+      }
     }
   },
   "exceptions": {
@@ -329,6 +373,15 @@
     },
     "no_game": {
       "message": "{team} har ingen kommande match."
+    },
+    "unknown_game": {
+      "message": "{league} har ingen match med id {game}."
+    },
+    "no_meeting": {
+      "message": "{team} och {opponent} möts inte den här säsongen."
+    },
+    "matchup_needs_game": {
+      "message": "Ange en match, eller ett lag och en motståndare."
     }
   },
   "selector": {

@@ -834,6 +834,7 @@ var cardStyles = i`
       hockey-team-view,
       hockey-recap-view,
       hockey-player-view,
+      hockey-preview-view,
       hockey-game-view,
       hockey-events-view,
       hockey-results-view {
@@ -3000,6 +3001,102 @@ var cardStyles = i`
         color: var(--secondary-text-color);
         font-variant-numeric: tabular-nums;
       }
+      /* ---- A game ahead ---- */
+      /* Between games the face's middle opens the next game's preview. */
+      .middle.tappable { cursor: pointer; border-radius: 10px; }
+      .middle.tappable:hover .kickoff { color: var(--primary-color); }
+      .middle.tappable:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+      }
+      .scoreboard.upcoming .sb-team { color: var(--primary-text-color); }
+      .scoreboard.upcoming .sb-score { color: var(--primary-text-color); }
+      /* The time is the score's size, a little smaller: it is not a result. */
+      .sb-score.pv-time { font-size: 2.2em; letter-spacing: 0.01em; }
+      .pv-subhead {
+        padding: 10px 0 0;
+        font-size: 0.78em;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+      }
+      .pv-source {
+        padding-top: 6px;
+        font-size: 0.74em;
+        color: var(--secondary-text-color);
+      }
+      .pv-h2h { padding: 4px 0 2px; }
+      /* The table, club against club: the better figure lit, a label between. */
+      .pv-vs { display: flex; flex-direction: column; flex: none; }
+      .pv-vs-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: baseline;
+        gap: 10px;
+        padding: 6px 4px;
+        border-top: 1px solid var(--divider-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .pv-vs-row:first-child { border-top: none; }
+      .pv-vs-value { font-size: 1.02em; color: var(--secondary-text-color); }
+      .pv-vs-value.away { text-align: right; }
+      .pv-vs-value.lead { color: var(--primary-text-color); font-weight: 700; }
+      .pv-vs-label {
+        font-size: 0.72em;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        text-align: center;
+        color: var(--secondary-text-color);
+      }
+      /* Form: a card for each club, its edge in the club's colour. */
+      .pv-teams {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        flex: none;
+      }
+      .pv-team {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        min-width: 0;
+        padding: 10px 12px 12px;
+        border-radius: 12px;
+        border-top: 3px solid var(--club, var(--primary-color));
+        background: var(--secondary-background-color);
+      }
+      .pv-team-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        font-weight: 600;
+      }
+      .pv-crest { width: 24px; height: 24px; flex: none; object-fit: contain; }
+      .pv-crest.placeholder { border-radius: 50%; background: var(--divider-color); }
+      .pv-team-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pv-fact { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 0.86em; }
+      .pv-fact-label {
+        font-size: 0.74em;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--secondary-text-color);
+      }
+      .pv-fact-value {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        color: var(--primary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .pv-fact-value.warn { color: var(--warning-color, #ffa726); }
+      .pv-form { display: inline-flex; gap: 4px; }
+      .pv-form .form-pip { width: 12px; height: 12px; }
+      .pv-record { color: var(--secondary-text-color); }
+      @media (max-width: 340px) {
+        .pv-teams { grid-template-columns: minmax(0, 1fr); }
+      }
       /* A player's figures with where each puts him in the league. */
       .lr-grid {
         display: grid;
@@ -3416,7 +3513,8 @@ var STATE = [
   "day",
   "stats",
   "statsData",
-  "picker"
+  "picker",
+  "preview"
 ];
 var HockeyController = class {
   constructor(host) {
@@ -3426,6 +3524,7 @@ var HockeyController = class {
     this._state = {};
     this._request = 0;
     this._liveTimer = null;
+    this._previewSeq = 0;
     this._state.tableView = "table";
     this._state.day = 0;
     this._state.statsOpen = false;
@@ -3580,6 +3679,7 @@ var HockeyController = class {
     this.statsOpen = false;
     this.day = 0;
     this.picker = null;
+    this.preview = null;
   }
   openTab(id) {
     this.newRequest();
@@ -3587,6 +3687,7 @@ var HockeyController = class {
     this.recap = null;
     this.team = null;
     this.player = null;
+    this.preview = null;
     if (id === "game") {
       this.panel = "game";
       return;
@@ -3607,6 +3708,7 @@ var HockeyController = class {
     this.recap = null;
     this.team = null;
     this.player = null;
+    this.preview = null;
     this.panel = id === "live" ? "table" : id;
     this.tableView = id === "live" ? "live" : "table";
     if (id === "results") this.loadResults();
@@ -3862,6 +3964,7 @@ var HockeyController = class {
   // asked for the first time their own tab is opened.
   async openTeam(row, tab = "overview") {
     if (!row?.team_code) return;
+    if (this.preview?.aboveTeam) this.preview = { ...this.preview, aboveTeam: false };
     const token = this.newRequest();
     this.team = { row, tab, loading: true };
     if (tab === "stats") this.loadStats("season");
@@ -3977,6 +4080,61 @@ var HockeyController = class {
       ...this.team,
       sorts: { ...this.team?.sorts ?? {}, [group]: { key, dir } }
     };
+  }
+  // ---- A game ahead -----------------------------------------------------------------
+  // Two clubs before they meet: this season's numbers are one quick read
+  // from what the integration holds; their meetings in earlier seasons come
+  // from the federation's archive, slower the first time, so they are asked
+  // for alongside and drawn when they come. The statistics for the season
+  // comparison are the Statistik tab's, read if the card has not got them.
+  //
+  // Replies are matched to the preview they were asked for rather than to the
+  // request stamp: going on to a club or a player from the preview stamps a
+  // new request, and the preview must still be whole when the reader comes
+  // back to it.
+  openPreview(game) {
+    if (!game?.game_id) return;
+    this.newRequest();
+    const id = ++this._previewSeq;
+    const current = () => this.preview?.id === id;
+    this.recap = null;
+    this.player = null;
+    this.panel = this.panel ?? "table";
+    this.preview = {
+      id,
+      game,
+      // Opened from a club's page, it goes over that page.
+      aboveTeam: Boolean(this.team),
+      loading: true,
+      history: { loading: true }
+    };
+    if (this.config.show_stats !== false) this.loadStats("season");
+    this.ask("get_matchup", { game_id: game.game_id }).then((data) => {
+      if (current()) this.preview = { ...this.preview, loading: false, data };
+    }).catch((err) => {
+      if (current()) this.preview = { ...this.preview, loading: false, error: errorText(err) };
+    });
+    this.ask("get_head_to_head", {
+      team: game.home_code,
+      opponent: game.away_code,
+      seasons: 5
+    }).then((data) => {
+      if (current()) this.preview = { ...this.preview, history: data ?? {} };
+    }).catch((err) => {
+      if (current()) this.preview = { ...this.preview, history: { error: errorText(err) } };
+    });
+  }
+  closePreview() {
+    this.newRequest();
+    this.preview = null;
+  }
+  /** Whether the preview is what the dialog shows, rather than a club's page
+   *  opened over it. */
+  previewOnTop() {
+    return Boolean(this.preview && (!this.team || this.preview.aboveTeam));
+  }
+  setPreview(patch) {
+    if (this.preview) this.preview = { ...this.preview, ...patch };
   }
   // ---- A game's summary ----------------------------------------------------------
   // The card holds nothing about a game once it is over - the goals and the
@@ -4211,6 +4369,11 @@ function lastGoal(stateObj) {
     </div>
   `;
 }
+function nextGameOf(next) {
+  const a3 = next?.attributes;
+  if (!a3?.game_id || Number.isNaN(new Date(next.state).getTime())) return null;
+  return { ...a3, start: next.state };
+}
 function barButtons(ctx, live, ids, showResult, next) {
   const cfg = ctx.config;
   const events = showResult ? live?.attributes?.events : null;
@@ -4220,6 +4383,7 @@ function barButtons(ctx, live, ids, showResult, next) {
   const liveTable = standings?.live_table;
   const hasLive = Array.isArray(liveTable) && liveTable.length > 0;
   const liveGames = Number(standings?.live_games ?? 0);
+  const upcoming = showResult ? null : nextGameOf(next);
   const buttons = [
     {
       id: "live",
@@ -4236,6 +4400,15 @@ function barButtons(ctx, live, ids, showResult, next) {
       label: "H\xE4ndelser",
       badge: Array.isArray(events) && events.length ? String(events.length) : null,
       show: cfg.show_events !== false && Array.isArray(events) && events.length > 0
+    },
+    {
+      id: "preview",
+      side: "left",
+      icon: "mdi:sword-cross",
+      label: "Matchinfo",
+      badge: null,
+      show: Boolean(upcoming),
+      game: upcoming
     },
     {
       id: "table",
@@ -4264,7 +4437,7 @@ function barButton(ctx, b3) {
     <button
       class="bar-button"
       aria-haspopup="dialog"
-      @click=${() => ctx.ctl.openBarButton(b3.id)}
+      @click=${() => b3.game ? ctx.ctl.openPreview(b3.game) : ctx.ctl.openBarButton(b3.id)}
     >
       <ha-icon icon=${b3.icon}></ha-icon>
       <span>${b3.label}</span>
@@ -4374,9 +4547,11 @@ var HockeyMatchCard = class extends i4 {
           ${badge(a3.home_logo, "home-bg")} ${badge(a3.away_logo, "away-bg")}
           <div class="content">
             ${sideButton(ctx, a3.home_code, a3.home_team, a3.home_logo)}
-            <div class="middle">
-              ${isLive ? liveMiddle(ctx, live) : showResult ? resultMiddle(ctx, lastResult, live) : nextMiddle(ctx, next)}
-            </div>
+            ${this.middle(
+      ctx,
+      isLive ? liveMiddle(ctx, live) : showResult ? resultMiddle(ctx, lastResult, live) : nextMiddle(ctx, next),
+      isLive || showResult ? null : nextGameOf(next)
+    )}
             ${sideButton(ctx, a3.away_code, a3.away_team, a3.away_logo)}
           </div>
           ${isLive ? lastGoal(live) : A}
@@ -4384,6 +4559,22 @@ var HockeyMatchCard = class extends i4 {
         ${footer(ctx, buttons)} ${this.dialog(ctx)}
       </ha-card>
     `;
+  }
+  // Between games the middle of the face is the next game, and a tap on it
+  // opens that game's preview.
+  middle(ctx, content, game) {
+    if (!game) return b2`<div class="middle">${content}</div>`;
+    const open = () => this.ctl.openPreview(game);
+    return b2`<div
+      class="middle tappable"
+      role="button"
+      tabindex="0"
+      title="Inför matchen"
+      @click=${open}
+      @keydown=${onActivate(open)}
+    >
+      ${content}
+    </div>`;
   }
   toggle(showingResult, resultId) {
     const label = showingResult ? "Visa n\xE4sta match" : "Visa resultatet";
@@ -4477,6 +4668,8 @@ var HockeyMatchBadge = class extends HockeyMatchCard {
       ctl.loadRecap({ ...this.shownResult, latest: true });
     } else {
       ctl.panel = "table";
+      const next = nextGameOf(ctl.state(ctl.ids.next));
+      if (next) ctl.openPreview(next);
     }
   }
   crests(a3, score) {
@@ -4539,7 +4732,7 @@ var HockeyDialog = class extends PartElement {
   }
   render() {
     const { ctl } = this.ctx;
-    const tight = ctl.player || ctl.recap || ctl.team || ctl.panel === "events" || ctl.panel === "results" || ctl.panel === "game";
+    const tight = ctl.player || ctl.recap || ctl.team || ctl.preview || ctl.panel === "events" || ctl.panel === "results" || ctl.panel === "game";
     return b2`
       <dialog
         @cancel=${(ev) => {
@@ -4583,6 +4776,7 @@ var HockeyDialog = class extends PartElement {
     const { ctl } = ctx;
     if (ctl.player) return b2`<hockey-player-view .ctx=${ctx}></hockey-player-view>`;
     if (ctl.recap) return b2`<hockey-recap-view .ctx=${ctx}></hockey-recap-view>`;
+    if (ctl.previewOnTop()) return b2`<hockey-preview-view .ctx=${ctx}></hockey-preview-view>`;
     if (ctl.team) return b2`<hockey-team-view .ctx=${ctx}></hockey-team-view>`;
     switch (ctl.panel) {
       case "game":
@@ -4606,7 +4800,7 @@ var HockeyDialog = class extends PartElement {
     const tabs = this.tabs();
     if (tabs.length < 2) return A;
     const view = ctl.panel === "table" ? ctl.tableView ?? "table" : null;
-    const active = (id) => !ctl.team && !ctl.player && !ctl.recap && (id === "game" ? ctl.panel === "game" : id === "today" ? view === "live" : id === "schedule" || id === "stats" ? view === id : view === "table");
+    const active = (id) => !ctl.team && !ctl.player && !ctl.recap && !ctl.preview && (id === "game" ? ctl.panel === "game" : id === "today" ? view === "live" : id === "schedule" || id === "stats" ? view === id : view === "table");
     return b2`
       <nav class="dialog-nav" aria-label="Avsnitt">
         ${tabs.map((tab) => this.tabButton(tab, active(tab.id)))}
@@ -5017,7 +5211,9 @@ function scoreboard(ctx, options) {
     outcome = "",
     clock = null,
     periodScores = null,
-    extra = A
+    extra = A,
+    centre,
+    kind = ""
   } = options;
   const homeScore = Number(home.score);
   const awayScore = Number(away.score);
@@ -5039,22 +5235,22 @@ function scoreboard(ctx, options) {
   };
   const shown = (value) => value === null || value === void 0 || value === "" ? "\u2013" : value;
   return b2`
-    <div class="scoreboard ${playing ? "playing-now" : "over"} ${outcome}">
+    <div class="scoreboard ${kind || (playing ? "playing-now" : "over")} ${outcome}">
       ${badge(home.logo, "sb-bg home")}
       ${badge(away.logo, "sb-bg away")}
       <div class="sb-row">
         ${side(home, homeScore, awayScore)}
         <div class="sb-centre">
-          <span class="sb-status">
-            ${playing ? b2`<span class="dot"></span>LIVE` : status}
-          </span>
-          <span class="sb-score">
-            <span class=${homeScore > awayScore ? "lead" : ""}>${shown(home.score)}</span>
-            <span class="sb-dash">–</span>
-            <span class=${awayScore > homeScore ? "lead" : ""}>${shown(away.score)}</span>
-          </span>
-          ${clock ? b2`<span class="sb-clock">${clock}</span>` : A}
-          ${periodScoresLine(periodScores)}
+          ${centre ?? b2`<span class="sb-status">
+              ${playing ? b2`<span class="dot"></span>LIVE` : status}
+            </span>
+            <span class="sb-score">
+              <span class=${homeScore > awayScore ? "lead" : ""}>${shown(home.score)}</span>
+              <span class="sb-dash">–</span>
+              <span class=${awayScore > homeScore ? "lead" : ""}>${shown(away.score)}</span>
+            </span>
+            ${clock ? b2`<span class="sb-clock">${clock}</span>` : A}
+            ${periodScoresLine(periodScores)}`}
         </div>
         ${side(away, awayScore, homeScore)}
       </div>
@@ -5205,7 +5401,7 @@ var HockeyPlayerView = class extends PartElement {
     const { name, jersey, data, loading: busy, error } = ctl.player ?? {};
     const back = b2`
       <button class="recap-back" @click=${() => ctl.closePlayer()}>
-        <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.recap ? "Sammanfattning" : ctl.team?.row?.team ?? (ctl.tableView === "stats" ? "Statistik" : "Tillbaka")}
+        <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.recap ? "Sammanfattning" : ctl.previewOnTop() ? "Inf\xF6r matchen" : ctl.team?.row?.team ?? (ctl.tableView === "stats" ? "Statistik" : "Tillbaka")}
       </button>
     `;
     if (busy) return b2`${back}${loading("H\xE4mtar spelaren\u2026", "hero")}`;
@@ -5321,6 +5517,518 @@ var HockeyPlayerView = class extends PartElement {
   }
 };
 
+// src/matchup.ts
+function headToHead(meetings, teamCode) {
+  const summary = {
+    games: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    overtime: 0,
+    goalsFor: 0,
+    goalsAgainst: 0
+  };
+  for (const game of meetings) {
+    const home = game.home_score;
+    const away = game.away_score;
+    if (home === null || home === void 0 || away === null || away === void 0) continue;
+    const isHome = String(game.home_code) === String(teamCode);
+    const ours = Number(isHome ? home : away);
+    const theirs = Number(isHome ? away : home);
+    summary.games += 1;
+    summary.goalsFor += ours;
+    summary.goalsAgainst += theirs;
+    if (ours > theirs) summary.wins += 1;
+    else if (ours < theirs) summary.losses += 1;
+    else summary.draws += 1;
+    if (String(game.decided_in ?? "FT").toUpperCase() !== "FT") summary.overtime += 1;
+  }
+  return summary;
+}
+function earlierMeetings(thisSeason, archive, before) {
+  const cutoff = before ? new Date(before).getTime() : Infinity;
+  const played = thisSeason.filter(
+    (game) => game.home_score !== null && game.home_score !== void 0 && !game.this_game && new Date(game.start).getTime() < cutoff
+  );
+  const seen = /* @__PURE__ */ new Set();
+  const day = (game) => String(game.start ?? "").slice(0, 10);
+  const all = [...played, ...archive].filter((game) => {
+    const key = `${day(game)}|${game.home_code}|${game.away_code}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return all.sort((a3, b3) => new Date(b3.start).getTime() - new Date(a3.start).getTime());
+}
+function streakText(streak) {
+  if (!streak || !(streak.count >= 2)) return null;
+  if (streak.kind === "win") return `${streak.count} raka vinster`;
+  if (streak.kind === "loss") return `${streak.count} raka f\xF6rluster`;
+  return null;
+}
+function restText(days) {
+  if (days === null || days === void 0) return null;
+  if (days <= 0) return "Samma dag";
+  if (days === 1) return "1 dag \u2013 spelade dagen innan";
+  return `${days} dagar`;
+}
+function recordText(record) {
+  if (!record || !record.games) return null;
+  return [record.wins, record.overtime_wins, record.overtime_losses, record.losses].join("\u2013");
+}
+var RESULT_LETTER = {
+  win: "V",
+  otwin: "\xD6V",
+  otloss: "\xD6F",
+  loss: "F",
+  draw: "O"
+};
+function seasonLabel(season) {
+  return String(season ?? "").replace("-", "/");
+}
+
+// src/parts/fixture.ts
+function outcomeFor(game, teamCode, played) {
+  if (!played || !teamCode) return null;
+  const ours = clubKey(teamCode);
+  const home = clubKey(game.home_code) === ours;
+  if (!home && clubKey(game.away_code) !== ours) return null;
+  const mine = Number(home ? game.home_score : game.away_score);
+  const theirs = Number(home ? game.away_score : game.home_score);
+  return mine === theirs ? null : mine > theirs;
+}
+function fixtureRow(ctx, game, teamCode, options = {}) {
+  const { isNext = false, hideDate = false, markSelf = false, live = false, still = false } = options;
+  const { locale, hass, ctl } = ctx;
+  const when = new Date(game.start ?? "");
+  const played = game.home_score !== null && game.home_score !== void 0;
+  const extra = game.decided_in && game.decided_in !== "FT" ? game.decided_in : "";
+  const won = game.won ?? outcomeFor(game, teamCode, played);
+  const through = teamCode || game.home_code;
+  const ours = clubKey(ctl.teamRef());
+  const self = markSelf && (clubKey(game.home_code) === ours || clubKey(game.away_code) === ours);
+  const home = Number(game.home_score);
+  const away = Number(game.away_score);
+  const lead = !played || home === away ? null : home > away ? "home" : "away";
+  const outcome = won === true ? "won" : won === false ? "lost" : "";
+  const meta = [];
+  if (game.venue) meta.push(b2`<span>${game.venue}</span>`);
+  if ((!played || live) && game.tv_channels?.length && ctx.config.show_tv !== false) {
+    meta.push(b2`<span class="fixture-tv">
+      <ha-icon icon="mdi:television-classic"></ha-icon>${game.tv_channels.join(" \xB7 ")}
+    </span>`);
+  }
+  const tappable = !still && (played || Boolean(game.game_id));
+  const open = played ? () => ctl.loadRecap(game, through) : () => ctl.openPreview(game);
+  return b2`
+    <div
+      class="fixture-row ${isNext ? "next" : ""} ${tappable ? "tappable" : ""} ${self ? "self" : ""}"
+      role=${tappable ? "button" : A}
+      tabindex=${tappable ? "0" : A}
+      title=${tappable && !played ? "Inf\xF6r matchen" : A}
+      @click=${tappable ? open : A}
+      @keydown=${tappable ? onActivate(open) : A}
+    >
+      <span class="fixture-when">
+        ${live && game.in_progress ? b2`<span class="fixture-live"><span class="playing"></span>P${game.period ?? ""}</span>` : Number.isNaN(when.getTime()) ? "" : hideDate ? when.toLocaleTimeString(locale, timeFormat(hass)) : b2`${when.toLocaleDateString(locale, SHORT_DATE)}<span class="fixture-clock"
+                    >${when.toLocaleTimeString(locale, timeFormat(hass))}</span
+                  >`}
+      </span>
+      <span class="fixture-side home ${lead === "home" ? "lead" : ""}">
+        ${teamLink(ctx, game.home_code, game.home_team, game.home_logo)}
+      </span>
+      <span class="fixture-goals home ${lead === "home" ? "lead" : ""} ${outcome}">
+        ${played ? game.home_score : ""}
+      </span>
+      <span class="fixture-side away ${lead === "away" ? "lead" : ""}">
+        ${teamLink(ctx, game.away_code, game.away_team, game.away_logo)}
+      </span>
+      <span class="fixture-goals away ${lead === "away" ? "lead" : ""} ${outcome}">
+        ${played ? game.away_score : ""}
+      </span>
+      ${meta.length || extra || game.highlight ? b2`<span class="fixture-meta">
+            <span class="fixture-detail">${meta}</span>
+            <span class="fixture-extra">
+              ${extra}
+              ${game.highlight ? b2`<a
+                    class="fixture-clip"
+                    href=${game.highlight.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Höjdpunkter"
+                    @click=${(ev) => ev.stopPropagation()}
+                    ><ha-icon icon="mdi:play-circle-outline"></ha-icon></a
+                  >` : A}
+            </span>
+          </span>` : A}
+    </div>
+  `;
+}
+
+// src/views/preview.ts
+var COMPARE = ["GF_GP", "GA_GP", "PP_perc", "PK_perc", "SVS_perc", "SOG_GP", "FO_perc", "PIM_GP"];
+var HISTORY_SHOWN = 6;
+var BACK = {
+  live: "Matcher",
+  schedule: "Spelschema",
+  stats: "Statistik"
+};
+var HockeyPreviewView = class extends PartElement {
+  render() {
+    const { ctx } = this;
+    const { ctl } = ctx;
+    const preview = ctl.preview ?? {};
+    const { data, loading: busy, error } = preview;
+    const game = data?.game ?? preview.game ?? {};
+    const backTo = preview.aboveTeam && ctl.team ? ctl.team.row?.team ?? "Laget" : BACK[ctl.tableView] ?? "Tabell";
+    return b2`
+      <button class="recap-back" @click=${() => ctl.closePreview()}>
+        <ha-icon icon="mdi:chevron-left"></ha-icon>${backTo}
+      </button>
+      ${this.head(game)}
+      ${busy && !data ? loading("H\xE4mtar matchinfo\u2026", "table") : A}
+      ${error && !data ? b2`<div class="recap-note">${error}</div>` : A}
+      ${data ? b2`${this.standing(data)} ${this.form(data)} ${this.meetings(data)} ${this.season(data)}
+          ${this.players(data)}` : A}
+    `;
+  }
+  // ---- The head ---------------------------------------------------------------
+  head(game) {
+    const { ctx } = this;
+    const { locale, hass } = ctx;
+    const when = new Date(game.start ?? "");
+    const valid = !Number.isNaN(when.getTime());
+    const day = valid ? relativeDay(when, locale) ?? when.toLocaleDateString(locale, { weekday: "long" }) : "";
+    const meta = [
+      game.venue,
+      game.round ? `omg\xE5ng ${game.round}` : null
+    ].filter(Boolean);
+    return b2`
+      ${scoreboard(ctx, {
+      home: { code: game.home_code, name: game.home_team, logo: game.home_logo },
+      away: { code: game.away_code, name: game.away_team, logo: game.away_logo },
+      kind: "upcoming",
+      centre: b2`
+          <span class="sb-status">${day}</span>
+          <span class="sb-score pv-time">
+            ${valid ? when.toLocaleTimeString(locale, timeFormat(hass)) : "\u2013"}
+          </span>
+          ${valid ? b2`<span class="sb-clock">${when.toLocaleDateString(locale, DATE)}</span>` : A}
+        `,
+      extra: tv(ctx, game.tv_channels)
+    })}
+      ${meta.length ? b2`<div class="recap-meta sb-meta">${meta.join(" \xB7 ")}</div>` : A}
+    `;
+  }
+  // ---- The table ----------------------------------------------------------------
+  standing(data) {
+    const home = data.home?.standing;
+    const away = data.away?.standing;
+    if (!home || !away) return A;
+    const perGame = (row) => row.games_played ? Number(row.points) / Number(row.games_played) : null;
+    const rows2 = [
+      ["Placering", home.rank, away.rank, "rank", "asc"],
+      ["Po\xE4ng", home.points, away.points, "n", "desc"],
+      ["Matcher", home.games_played, away.games_played, "plain", "desc"],
+      ["Po\xE4ng per match", perGame(home), perGame(away), "dec", "desc"],
+      ["M\xE5lskillnad", home.goal_difference, away.goal_difference, "pm", "desc"],
+      [
+        "Gjorda \u2013 insl\xE4ppta",
+        `${home.goals_for ?? "\u2013"}\u2013${home.goals_against ?? "\u2013"}`,
+        `${away.goals_for ?? "\u2013"}\u2013${away.goals_against ?? "\u2013"}`,
+        "text",
+        "desc"
+      ]
+    ];
+    const shown = (value, kind) => value === null || value === void 0 ? "\u2013" : kind === "rank" ? ordinal(Number(value)) : kind === "dec" ? formatStat(value, "dec") : kind === "pm" ? plus(value) : String(value);
+    return b2`
+      <div class="team-section">Tabellen</div>
+      <div class="pv-vs">
+        ${rows2.map(([label, a3, b3, kind, dir]) => {
+      const x2 = statNumber(a3);
+      const y3 = statNumber(b3);
+      const better = kind === "text" || kind === "plain" || x2 === null || y3 === null || x2 === y3 ? null : (dir === "asc" ? x2 < y3 : x2 > y3) ? "home" : "away";
+      return b2`
+            <div class="pv-vs-row">
+              <span class="pv-vs-value home ${better === "home" ? "lead" : ""}">${shown(a3, kind)}</span>
+              <span class="pv-vs-label">${label}</span>
+              <span class="pv-vs-value away ${better === "away" ? "lead" : ""}">${shown(b3, kind)}</span>
+            </div>
+          `;
+    })}
+      </div>
+    `;
+  }
+  // ---- Form -------------------------------------------------------------------------
+  pips(entries) {
+    const { locale } = this.ctx;
+    return b2`<span class="pv-form">
+      ${(entries ?? []).map((game) => {
+      const when = new Date(game.start ?? "");
+      const date = Number.isNaN(when.getTime()) ? "" : `${when.toLocaleDateString(locale, { day: "numeric", month: "short" })} \xB7 `;
+      return b2`<span
+          class="form-pip ${game.result}"
+          title=${`${date}${RESULT_LETTER[game.result] ?? ""} ${game.score} ${game.is_home ? "mot" : "borta mot"} ${game.opponent}`}
+        ></span>`;
+    })}
+    </span>`;
+  }
+  form(data) {
+    if (!data.home?.team_code || !data.away?.team_code) return A;
+    const sides = [
+      [data.home, "home"],
+      [data.away, "away"]
+    ];
+    return b2`
+      <div class="team-section">Form</div>
+      <div class="pv-teams">
+        ${sides.map(([side, where]) => this.teamCard(side, where))}
+      </div>
+    `;
+  }
+  teamCard(side, where) {
+    if (!side) return A;
+    const { ctl } = this.ctx;
+    const venueForm = where === "home" ? side.home_form : side.away_form;
+    const venueRecord = where === "home" ? side.home_record : side.away_record;
+    const last = side.last_game;
+    const fact = (label, value, cls = "") => value === null || value === void 0 || value === "" ? A : b2`<div class="pv-fact">
+            <span class="pv-fact-label">${label}</span>
+            <span class="pv-fact-value ${cls}">${value}</span>
+          </div>`;
+    return b2`
+      <div class="pv-team" style=${`--club: ${ctl.clubColourOf(side.team_code)}`}>
+        <div class="pv-team-head">
+          ${badge(side.logo, "pv-crest")}<span class="pv-team-name">${side.team}</span>
+        </div>
+        ${fact("Senaste 5", side.form?.length ? this.pips(side.form) : null)}
+        ${fact(
+      where === "home" ? "Hemma" : "Borta",
+      venueForm?.length ? b2`${this.pips(venueForm)}<span class="pv-record">${recordText(venueRecord)}</span>` : null
+    )}
+        ${fact("S\xE4songen (V\u2013\xD6V\u2013\xD6F\u2013F)", recordText(side.record))}
+        ${fact("Svit", streakText(side.streak))}
+        ${fact(
+      "F\xF6rra matchen",
+      last ? `${RESULT_LETTER[last.result] ?? ""} ${String(last.score).replace("-", "\u2013")} mot ${last.opponent_name ?? last.opponent}` : null
+    )}
+        ${fact("Vila", restText(side.rest_days), side.rest_days === 1 ? "warn" : "")}
+      </div>
+    `;
+  }
+  // ---- Meetings ------------------------------------------------------------------
+  meetings(data) {
+    const { ctx } = this;
+    const { ctl } = ctx;
+    const game = data.game ?? {};
+    const preview = ctl.preview ?? {};
+    const history = preview.history ?? {};
+    const archive = history.meetings ?? [];
+    const thisSeason = (data.meetings ?? []).filter((m2) => !m2.this_game);
+    const earlier = earlierMeetings(data.meetings ?? [], archive, game.start);
+    const summary = headToHead(earlier, game.home_code);
+    const ours = ctl.teamRef();
+    const through = [game.home_code, game.away_code].find((code) => clubKey(code) === clubKey(ours));
+    const groups = /* @__PURE__ */ new Map();
+    for (const meeting of archive) {
+      const series = meeting.series && meeting.series !== meeting.league ? meeting.series : meeting.league;
+      const key = `${seasonLabel(meeting.season)} \xB7 ${series === "HockeyAllsvenskan" ? "Hockeyallsvenskan" : series}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(meeting);
+    }
+    const limit = preview.historyMore ? Infinity : HISTORY_SHOWN;
+    let left = limit;
+    const archiveRows = [];
+    for (const [label, games] of groups) {
+      if (left <= 0) break;
+      archiveRows.push(b2`<div class="pv-subhead">${label}</div>`);
+      for (const meeting of games.slice(0, left)) {
+        archiveRows.push(fixtureRow(ctx, meeting, through, { still: true }));
+      }
+      left -= games.length;
+    }
+    const searched = this.searched(history.seasons);
+    return b2`
+      <div class="team-section">Inbördes möten</div>
+      ${summary.games ? this.summary(summary, game) : A}
+      ${thisSeason.length ? b2`<div class="pv-subhead">Den här säsongen</div>
+            ${thisSeason.map((meeting) => fixtureRow(ctx, meeting, through))}` : A}
+      ${history.loading ? loading("H\xE4mtar tidigare m\xF6ten\u2026", "games") : history.error ? b2`<div class="recap-note">Tidigare säsonger gick inte att läsa: ${history.error}</div>` : archive.length ? b2`${archiveRows}
+              ${archive.length > HISTORY_SHOWN && !preview.historyMore ? b2`<button class="stats-more" @click=${() => ctl.setPreview({ historyMore: true })}>
+                    Visa fler (${archive.length - HISTORY_SHOWN} till)
+                    <ha-icon icon="mdi:chevron-down"></ha-icon>
+                  </button>` : A}` : b2`<div class="recap-note">
+                Inga möten ${searched ? `i ${searched}` : "tidigare s\xE4songer"}.
+              </div>`}
+      ${archive.length && searched ? b2`<div class="pv-source">Tidigare säsonger: ${searched}, ur förbundets arkiv</div>` : A}
+    `;
+  }
+  /** "SHL och Hockeyallsvenskan sedan 2021/22", from the seasons searched. */
+  searched(seasons) {
+    if (!seasons?.length) return null;
+    const years = seasons.map((s4) => Number(String(s4).slice(0, 4))).filter(Boolean);
+    const leagues = [...new Set(seasons.map((s4) => String(s4).split(" ").slice(1).join(" ")))].map(
+      (name) => name === "HockeyAllsvenskan" ? "Hockeyallsvenskan" : name
+    );
+    const since = Math.min(...years);
+    return `${leagues.join(" och ")} sedan ${since}/${String(since + 1).slice(2)}`;
+  }
+  /** The two clubs' colours for a pair of bars; a club in the same colour as
+   *  the other gives way to grey, or the two bars would read as one. */
+  colours(game) {
+    const { ctl } = this.ctx;
+    const home = ctl.clubColourOf(game.home_code);
+    const away = ctl.clubColourOf(game.away_code);
+    return [home, away === home ? "var(--secondary-text-color)" : away];
+  }
+  summary(summary, game) {
+    const [home, away] = this.colours(game);
+    const total = summary.wins + summary.losses || 1;
+    const share = (n4) => n4 / total * 100;
+    return b2`
+      <div class="stat pv-h2h">
+        <div class="stat-values">
+          <span class="stat-value ${summary.wins > summary.losses ? "lead" : ""}">${summary.wins}</span>
+          <span class="stat-value ${summary.losses > summary.wins ? "lead" : ""}">${summary.losses}</span>
+        </div>
+        <div class="bar-track">
+          <span class="bar-side home">
+            <span class="bar-fill" style=${`width:${share(summary.wins)}%;background:${home}`}></span>
+          </span>
+          <span class="bar-side away">
+            <span
+              class="bar-fill"
+              style=${`width:${share(summary.losses)}%;background:${away}`}
+            ></span>
+          </span>
+        </div>
+        <div class="stat-foot">
+          <span class="stat-detail">${summary.goalsFor} mål</span>
+          <span class="stat-label">
+            Vinster, ${summary.games === 1 ? "senaste m\xF6tet" : `${summary.games} senaste m\xF6tena`}
+          </span>
+          <span class="stat-detail">${summary.goalsAgainst} mål</span>
+        </div>
+      </div>
+      ${summary.overtime ? b2`<div class="pv-source">
+            ${summary.overtime === 1 ? "Ett av m\xF6tena avgjordes" : `${summary.overtime} av m\xF6tena avgjordes`}
+            i förlängning eller straffar
+          </div>` : A}
+    `;
+  }
+  // ---- The season in figures -------------------------------------------------
+  teamRows(data) {
+    const stats = this.ctx.ctl.statsData?.season?.data;
+    const teams = stats?.teams ?? [];
+    const find = (code) => teams.find((row) => clubKey(row.team_code) === clubKey(code));
+    return [find(data.game?.home_code), find(data.game?.away_code), teams];
+  }
+  season(data) {
+    const { ctl, config } = this.ctx;
+    if (config.show_stats === false) return A;
+    const entry = ctl.statsData?.season;
+    if (!entry?.data) {
+      return entry?.loading ? b2`<div class="team-section">Säsongen i siffror</div>${loading("H\xE4mtar statistiken\u2026", "table")}` : A;
+    }
+    const [home, away, teams] = this.teamRows(data);
+    if (!home || !away) return A;
+    const [homeColour, awayColour] = this.colours(data.game ?? {});
+    const bars = COMPARE.filter(
+      (key) => TEAM_METRICS[key] && statNumber(home[key]) !== null && statNumber(away[key]) !== null
+    ).map((key) => this.compare(key, TEAM_METRICS[key], home, away, teams, homeColour, awayColour));
+    if (!bars.length) return A;
+    return b2`
+      <div class="team-section">Säsongen i siffror</div>
+      <div class="stats">${bars}</div>
+    `;
+  }
+  // One figure, the two clubs either side of it: a bar each, the better one
+  // lit whichever way better runs, and where each stands in the league.
+  compare(key, metric, home, away, teams, homeColour, awayColour) {
+    const percent = metric.kind === "pct";
+    const a3 = statNumber(home[key]);
+    const b3 = statNumber(away[key]);
+    const total = a3 + b3;
+    const share = (value) => percent ? Math.min(value, 100) : total ? value / total * 100 : 0;
+    const asc = metric.dir === "asc";
+    const lead = a3 === b3 ? null : (asc ? a3 < b3 : a3 > b3) ? "home" : "away";
+    const { ranked } = rankStats(teams, key, metric);
+    const place = (row) => ranked.find((r4) => r4.row === row)?.rank;
+    const where = (row) => {
+      const rank = place(row);
+      return rank ? `${ordinal(rank)} i ligan` : "";
+    };
+    return b2`
+      <div class="stat">
+        <div class="stat-values">
+          <span class="stat-value ${lead === "home" ? "lead" : ""}">${formatStat(a3, metric.kind, true)}</span>
+          <span class="stat-value ${lead === "away" ? "lead" : ""}">${formatStat(b3, metric.kind, true)}</span>
+        </div>
+        <div class="bar-track">
+          <span class="bar-side home">
+            <span class="bar-fill" style=${`width:${share(a3)}%;background:${homeColour}`}></span>
+          </span>
+          <span class="bar-side away">
+            <span
+              class="bar-fill"
+              style=${`width:${share(b3)}%;background:${awayColour}`}
+            ></span>
+          </span>
+        </div>
+        <div class="stat-foot">
+          <span class="stat-detail">${where(home)}</span>
+          <span class="stat-label">${metric.label}</span>
+          <span class="stat-detail">${where(away)}</span>
+        </div>
+      </div>
+    `;
+  }
+  // ---- Who to watch ------------------------------------------------------------
+  players(data) {
+    const { ctx } = this;
+    const { ctl, config } = ctx;
+    if (config.show_stats === false) return A;
+    const stats = ctl.statsData?.season?.data;
+    if (!stats) return A;
+    const skaters = stats.skaters ?? [];
+    const goalies = stats.goalies ?? [];
+    const { ranked } = rankStats(skaters, "TP", SKATER_METRICS.TP);
+    const boards = [data.game?.home_code, data.game?.away_code].map((code) => {
+      const key = clubKey(code);
+      const top = ranked.filter(({ row }) => clubKey(row.team_code) === key).slice(0, 3);
+      const keepers = goalies.filter((row) => clubKey(row.team_code) === key).sort((x2, y3) => Number(y3.GPI ?? 0) - Number(x2.GPI ?? 0) || Number(y3.ok !== false) - Number(x2.ok !== false));
+      return { code, side: code === data.game?.home_code ? data.home : data.away, top, keeper: keepers[0] };
+    });
+    if (!boards.some((board) => board.top.length || board.keeper)) return A;
+    return b2`
+      <div class="team-section">Att hålla ögonen på</div>
+      <div class="ts-leaders">
+        ${boards.map(
+      ({ code, side, top, keeper }) => b2`
+            <div class="ts-board">
+              <span class="ts-board-title">${side?.team ?? code}</span>
+              ${top.map(
+        ({ row, rank }) => b2`
+                  <span class="ts-board-row">
+                    <span class="lb-name">${playerLink(ctx, row.player, row.team_code)}</span>
+                    <span class="lb-value">${row.G ?? 0}+${row.A ?? 0}=${row.TP ?? 0}</span>
+                    <span class="ts-board-place">${rank ? ordinal(rank) : "\u2013"}</span>
+                  </span>
+                `
+      )}
+              ${keeper ? b2`<span class="ts-board-row">
+                    <span class="lb-name">${playerLink(ctx, keeper.player, keeper.team_code)}</span>
+                    <span class="lb-value">${formatStat(keeper.SVS_perc, "pct", true)}</span>
+                    <span class="ts-board-place">MV</span>
+                  </span>` : A}
+            </div>
+          `
+    )}
+      </div>
+    `;
+  }
+};
+
 // src/views/recap.ts
 var HockeyRecapView = class extends PartElement {
   dayTitle(offset) {
@@ -5332,7 +6040,7 @@ var HockeyRecapView = class extends PartElement {
     const { row, data, error, loading: busy } = ctl.recap ?? {};
     const back = b2`
       <button class="recap-back" @click=${() => ctl.closeRecap()}>
-        <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.team ? ctl.team.row?.team ?? "Laget" : ctl.tableView === "live" ? this.dayTitle(ctl.day ?? 0) : "Tidigare matcher"}
+        <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.previewOnTop() ? "Inf\xF6r matchen" : ctl.team ? ctl.team.row?.team ?? "Laget" : ctl.tableView === "live" ? this.dayTitle(ctl.day ?? 0) : "Tidigare matcher"}
       </button>
     `;
     if (busy) return b2`${back}${loading("H\xE4mtar matchen\u2026", "hero")}`;
@@ -5383,82 +6091,6 @@ var HockeyRecapView = class extends PartElement {
     `;
   }
 };
-
-// src/parts/fixture.ts
-function outcomeFor(game, teamCode, played) {
-  if (!played || !teamCode) return null;
-  const ours = clubKey(teamCode);
-  const home = clubKey(game.home_code) === ours;
-  if (!home && clubKey(game.away_code) !== ours) return null;
-  const mine = Number(home ? game.home_score : game.away_score);
-  const theirs = Number(home ? game.away_score : game.home_score);
-  return mine === theirs ? null : mine > theirs;
-}
-function fixtureRow(ctx, game, teamCode, options = {}) {
-  const { isNext = false, hideDate = false, markSelf = false, live = false } = options;
-  const { locale, hass, ctl } = ctx;
-  const when = new Date(game.start ?? "");
-  const played = game.home_score !== null && game.home_score !== void 0;
-  const extra = game.decided_in && game.decided_in !== "FT" ? game.decided_in : "";
-  const won = game.won ?? outcomeFor(game, teamCode, played);
-  const through = teamCode || game.home_code;
-  const ours = clubKey(ctl.teamRef());
-  const self = markSelf && (clubKey(game.home_code) === ours || clubKey(game.away_code) === ours);
-  const home = Number(game.home_score);
-  const away = Number(game.away_score);
-  const lead = !played || home === away ? null : home > away ? "home" : "away";
-  const outcome = won === true ? "won" : won === false ? "lost" : "";
-  const meta = [];
-  if (game.venue) meta.push(b2`<span>${game.venue}</span>`);
-  if ((!played || live) && game.tv_channels?.length && ctx.config.show_tv !== false) {
-    meta.push(b2`<span class="fixture-tv">
-      <ha-icon icon="mdi:television-classic"></ha-icon>${game.tv_channels.join(" \xB7 ")}
-    </span>`);
-  }
-  const open = () => ctl.loadRecap(game, through);
-  return b2`
-    <div
-      class="fixture-row ${isNext ? "next" : ""} ${played ? "tappable" : ""} ${self ? "self" : ""}"
-      role=${played ? "button" : A}
-      tabindex=${played ? "0" : A}
-      @click=${played ? open : A}
-      @keydown=${played ? onActivate(open) : A}
-    >
-      <span class="fixture-when">
-        ${live && game.in_progress ? b2`<span class="fixture-live"><span class="playing"></span>P${game.period ?? ""}</span>` : Number.isNaN(when.getTime()) ? "" : hideDate ? when.toLocaleTimeString(locale, timeFormat(hass)) : b2`${when.toLocaleDateString(locale, SHORT_DATE)}<span class="fixture-clock"
-                    >${when.toLocaleTimeString(locale, timeFormat(hass))}</span
-                  >`}
-      </span>
-      <span class="fixture-side home ${lead === "home" ? "lead" : ""}">
-        ${teamLink(ctx, game.home_code, game.home_team, game.home_logo)}
-      </span>
-      <span class="fixture-goals home ${lead === "home" ? "lead" : ""} ${outcome}">
-        ${played ? game.home_score : ""}
-      </span>
-      <span class="fixture-side away ${lead === "away" ? "lead" : ""}">
-        ${teamLink(ctx, game.away_code, game.away_team, game.away_logo)}
-      </span>
-      <span class="fixture-goals away ${lead === "away" ? "lead" : ""} ${outcome}">
-        ${played ? game.away_score : ""}
-      </span>
-      ${meta.length || extra || game.highlight ? b2`<span class="fixture-meta">
-            <span class="fixture-detail">${meta}</span>
-            <span class="fixture-extra">
-              ${extra}
-              ${game.highlight ? b2`<a
-                    class="fixture-clip"
-                    href=${game.highlight.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Höjdpunkter"
-                    @click=${(ev) => ev.stopPropagation()}
-                    ><ha-icon icon="mdi:play-circle-outline"></ha-icon></a
-                  >` : A}
-            </span>
-          </span>` : A}
-    </div>
-  `;
-}
 
 // src/views/results.ts
 var HockeyResultsView = class extends PartElement {
@@ -6514,6 +7146,7 @@ define("hockey-stats-view", HockeyStatsView);
 define("hockey-team-view", HockeyTeamView);
 define("hockey-recap-view", HockeyRecapView);
 define("hockey-player-view", HockeyPlayerView);
+define("hockey-preview-view", HockeyPreviewView);
 define("hockey-game-view", HockeyGameView);
 define("hockey-events-view", HockeyEventsView);
 define("hockey-results-view", HockeyResultsView);

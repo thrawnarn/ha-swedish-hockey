@@ -31,6 +31,8 @@ before any push.
 | `swehockey.py`, `stats.py` | The federation's game sheet, and the figures made from it |
 | `league_stats.py` | `get_statistics`: the statnet tables both leagues publish |
 | `tv.py` | TV channels from tv.nu, paired with games by time and club name |
+| `matchup.py` | Pure: two clubs before a game - form, records, runs, rest, meetings - from the season in memory (`get_matchup`); the table's form comes from here too |
+| `archive.py` | Earlier seasons from the federation's archive (`get_head_to_head`): season picker, series, schedule pages; finished series are read once and kept in `.storage/swedish_hockey.archive` |
 | `services.py` | Every service; normalised dictionaries for both leagues |
 | `card.py` | Serves `www/` and keeps one Lovelace resource for the card, versioned by the build's fingerprint; takes over hand-added copies; removed with the last entry |
 | `sensor.py`, `calendar.py`, `switch.py` | The entities |
@@ -44,10 +46,10 @@ The card (`frontend/src/`):
 | `controller.ts` | All of the dialog's state, every service call, and how to move between views |
 | `context.ts` | `Ctx`: what every part is handed, new on every render |
 | `dialog/dialog.ts`, `dialog/picker.ts` | `<hockey-dialog>` (routing, tabs, photo) and `<hockey-team-picker>` |
-| `views/*.ts` | One element per view: today, table, schedule, stats, team, recap, player, game, events, results |
+| `views/*.ts` | One element per view: today, table, schedule, stats, team, recap, player, preview, game, events, results |
 | `parts/*.ts` | Markup shared by the views: fixture rows, scoreboard, stat bars, timeline, filter row, `<hockey-loading>` |
 | `styles.ts` | The one stylesheet |
-| `format.ts`, `stats-model.ts`, `teams.ts`, `time.ts`, `constants.ts` | Pure helpers and tables, tested directly |
+| `format.ts`, `stats-model.ts`, `teams.ts`, `time.ts`, `constants.ts`, `matchup.ts` | Pure helpers and tables, tested directly |
 
 ## Conventions
 
@@ -77,6 +79,11 @@ The card (`frontend/src/`):
   (writing first would save over the user's resources). It touches nothing
   in YAML mode. Keep both rules if you change it; `tests/test_card.py`
   checks them.
+- **A preview and a club's page stack in the order they were opened**
+  (`preview.aboveTeam`, `previewOnTop()`): a preview opened from a club goes
+  over it, a club opened from a preview goes over that. The preview's replies
+  are matched to the preview, not to the request stamp, so going deeper and
+  coming back finds it whole.
 - **State changes go through the controller.** Its state fields are accessors
   that ask the card to render again; views read them and call its methods.
   Every fetch is stamped (`newRequest`/`stale`) so a late reply cannot

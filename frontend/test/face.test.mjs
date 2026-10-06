@@ -13,9 +13,9 @@ test("between games the card shows the next fixture", async () => {
   unmount(card);
 });
 
-test("the footer offers the table and the earlier results", async () => {
+test("the footer offers the next game's page, the table and the earlier results", async () => {
   const card = await mount();
-  assert.deepEqual($$(card, ".footer-bar .bar-button").map(text), ["Tabell", "Tidigare"]);
+  assert.deepEqual($$(card, ".footer-bar .bar-button").map(text), ["Matchinfo", "Tabell", "Tidigare"]);
   unmount(card);
 });
 
@@ -49,6 +49,7 @@ test("while a game is on the card shows it live, with the last goal", async () =
   assert.match(text($(card, ".footer-line")), /07:58 .*Ada Berg.*\(PP\)/);
   assert.equal(text($(card, ".assists")), "Eva Fors, Bo Ek");
   // The match log is a button of its own while the game is on.
+  // The next game's page is not offered while this one is on.
   assert.deepEqual($$(card, ".footer-bar .bar-button").map(text), ["Händelser 4", "Tabell", "Tidigare"]);
   unmount(card);
 });

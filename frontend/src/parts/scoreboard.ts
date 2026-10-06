@@ -21,6 +21,11 @@ export interface ScoreboardOptions {
   clock?: string | null;
   periodScores?: unknown;
   extra?: TemplateResult | typeof nothing;
+  /** What goes between the clubs instead of a score: a game ahead has a
+   *  time, not a result. */
+  centre?: TemplateResult;
+  /** Extra classes for the board, for a kind of game it is drawn for. */
+  kind?: string;
 }
 
 // The two clubs either side of the score, their crests faded in behind. Over
@@ -36,6 +41,8 @@ export function scoreboard(ctx: Ctx, options: ScoreboardOptions) {
     clock = null,
     periodScores = null,
     extra = nothing,
+    centre,
+    kind = "",
   } = options;
   const homeScore = Number(home.score);
   const awayScore = Number(away.score);
@@ -58,22 +65,23 @@ export function scoreboard(ctx: Ctx, options: ScoreboardOptions) {
   const shown = (value: unknown) =>
     value === null || value === undefined || value === "" ? "–" : value;
   return html`
-    <div class="scoreboard ${playing ? "playing-now" : "over"} ${outcome}">
+    <div class="scoreboard ${kind || (playing ? "playing-now" : "over")} ${outcome}">
       ${badge(home.logo, "sb-bg home")}
       ${badge(away.logo, "sb-bg away")}
       <div class="sb-row">
         ${side(home, homeScore, awayScore)}
         <div class="sb-centre">
-          <span class="sb-status">
-            ${playing ? html`<span class="dot"></span>LIVE` : status}
-          </span>
-          <span class="sb-score">
-            <span class=${homeScore > awayScore ? "lead" : ""}>${shown(home.score)}</span>
-            <span class="sb-dash">–</span>
-            <span class=${awayScore > homeScore ? "lead" : ""}>${shown(away.score)}</span>
-          </span>
-          ${clock ? html`<span class="sb-clock">${clock}</span>` : nothing}
-          ${periodScoresLine(periodScores)}
+          ${centre ??
+          html`<span class="sb-status">
+              ${playing ? html`<span class="dot"></span>LIVE` : status}
+            </span>
+            <span class="sb-score">
+              <span class=${homeScore > awayScore ? "lead" : ""}>${shown(home.score)}</span>
+              <span class="sb-dash">–</span>
+              <span class=${awayScore > homeScore ? "lead" : ""}>${shown(away.score)}</span>
+            </span>
+            ${clock ? html`<span class="sb-clock">${clock}</span>` : nothing}
+            ${periodScoresLine(periodScores)}`}
         </div>
         ${side(away, awayScore, homeScore)}
       </div>

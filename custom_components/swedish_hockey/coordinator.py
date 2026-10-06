@@ -38,6 +38,7 @@ from .push import (
     overview_is_game,
 )
 from .league_stats import LeagueStatistics
+from .matchup import form_of as _form_of
 from .swehockey import SHEET_TTL, GameSheet, SwehockeyClient
 from .tv import async_tv_listings, match_channels
 from .const import (
@@ -1231,37 +1232,6 @@ def table_rows(
             )
         rows.append(entry)
     return rows
-
-
-def _form_of(games: list[Game], team_key: str, count: int) -> list[dict[str, Any]]:
-    """Return how a club's last few games went, oldest first.
-
-    A win in overtime or a shootout is worth less than one in regulation and a
-    loss there is worth more than none at all, so the four are kept apart.
-    """
-    form = []
-    for game in games[-count:]:
-        is_home = game.home.key == team_key
-        ours = game.home_score if is_home else game.away_score
-        theirs = game.away_score if is_home else game.home_score
-        extra = (game.decided_in or "FT").upper() not in ("FT", "")
-        if ours == theirs:
-            result = "draw"
-        elif ours > theirs:
-            result = "otwin" if extra else "win"
-        else:
-            result = "otloss" if extra else "loss"
-        form.append(
-            {
-                "result": result,
-                "start": game.start.isoformat(),
-                "opponent": (game.away if is_home else game.home).key,
-                "is_home": is_home,
-                "score": f"{ours}-{theirs}",
-                "decided_in": game.decided_in,
-            }
-        )
-    return form
 
 
 def _richer(goal: Goal, known: dict[str, Any]) -> bool:

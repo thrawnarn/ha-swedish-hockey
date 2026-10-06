@@ -16,7 +16,7 @@ import { findTeams } from "../teams";
 import { localeOf, relativeDay, timeFormat } from "../time";
 import type { CardConfig, HassEntity, HomeAssistant, Row } from "../types";
 import { HockeyMatchCard } from "./card";
-import { barButtons, resultIsRecent } from "./face";
+import { barButtons, nextGameOf, resultIsRecent } from "./face";
 
 export class HockeyMatchBadge extends HockeyMatchCard {
   /** The result the chip is showing, which is what a tap opens. */
@@ -104,6 +104,10 @@ export class HockeyMatchBadge extends HockeyMatchCard {
       ctl.loadRecap({ ...this.shownResult, latest: true });
     } else {
       ctl.panel = "table";
+      // The chip shows the next game; a tap opens that game's preview, with
+      // the table one tap back.
+      const next = nextGameOf(ctl.state(ctl.ids.next));
+      if (next) ctl.openPreview(next);
     }
   }
 

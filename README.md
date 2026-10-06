@@ -21,7 +21,9 @@ league.
   league's statistics.
 - **A card and a badge.** Live score or next game on the face; behind it a
   dialog with today's games, the table, the schedule, statistics, each club's
-  page and each player's.
+  page, each player's, and a preview of every game still to come: where the
+  two clubs stand, their form, their meetings this season and in earlier
+  ones, how their seasons compare and who to watch.
 
 > This is an unofficial integration. Neither league publishes an API; it reads
 > the same endpoints the leagues' own websites use, and it can break when they
@@ -90,6 +92,10 @@ type: custom:hockey-match-badge
 team: LIF
 ```
 
+Any game still to come opens a preview: tap it in the schedule, among
+today's games or on a club's page, tap the middle of the card or its
+**Matchinfo** button, or tap the badge while it shows the next game.
+
 `team` is the club code or the team device's name. The card finds the team's
 sensors from its device; `live_entity`, `next_entity` and `standings_entity`
 override that for hand-written YAML.
@@ -146,6 +152,8 @@ Every service takes the league's `config_entry_id` and returns data
 | `get_player` | A player's season |
 | `get_roster` | Everyone who has played for a team this season |
 | `get_statistics` | The league's skater, goalkeeper and club statistics |
+| `get_matchup` | Two clubs before a game (by `game_id`, or `team` and `opponent` for their next meeting): table rows, form overall, at home and away, records, runs, rest and this season's meetings |
+| `get_head_to_head` | Two clubs' meetings in earlier seasons (`seasons`, default 5), in either league, from the federation's archive |
 | `set_goal_reference` | Remembers what was sent for a goal (a message id), handed back by `swedish_hockey_goal_updated` |
 
 ## Events
@@ -169,6 +177,7 @@ and then edit that message rather than send a second one.
 | `hockeyallsvenskan.se` | Hockeyallsvenskan schedule, table, games, players, statistics |
 | `game-data.s8y.se`, `game-broadcaster.s8y.se` | Play-by-play, and the live feed both leagues' sites use |
 | `stats.swehockey.se` | The federation's game sheets: period scores, saves, power play time |
+| `stats.swehockey.se` archive | Earlier seasons of both leagues, for meetings between two clubs; each finished season is read once and kept |
 | `tv.nu` | Which channel shows a game (neither league says) |
 
 ## Development

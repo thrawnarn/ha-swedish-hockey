@@ -14,6 +14,9 @@ export interface FixtureOptions {
   hideDate?: boolean;
   markSelf?: boolean;
   live?: boolean;
+  /** A row that opens nothing: a game from the archive has no summary to
+   *  read back. */
+  still?: boolean;
 }
 
 // A result row already knows whose win it was; a fixture is written from no
@@ -28,14 +31,15 @@ export function outcomeFor(game: Game, teamCode: string | null | undefined, play
   return mine === theirs ? null : mine > theirs;
 }
 
-// A game that has been played opens its own summary.
+// A game that has been played opens its own summary; one still to come opens
+// its preview.
 export function fixtureRow(
   ctx: Ctx,
   game: Game,
   teamCode: string | null | undefined,
   options: FixtureOptions = {},
 ) {
-  const { isNext = false, hideDate = false, markSelf = false, live = false } = options;
+  const { isNext = false, hideDate = false, markSelf = false, live = false, still = false } = options;
   const { locale, hass, ctl } = ctx;
   const when = new Date(game.start ?? "");
   const played = game.home_score !== null && game.home_score !== undefined;
@@ -64,14 +68,16 @@ export function fixtureRow(
       <ha-icon icon="mdi:television-classic"></ha-icon>${game.tv_channels.join(" · ")}
     </span>`);
   }
-  const open = () => ctl.loadRecap(game, through);
+  const tappable = !still && (played || Boolean(game.game_id));
+  const open = played ? () => ctl.loadRecap(game, through) : () => ctl.openPreview(game);
   return html`
     <div
-      class="fixture-row ${isNext ? "next" : ""} ${played ? "tappable" : ""} ${self ? "self" : ""}"
-      role=${played ? "button" : nothing}
-      tabindex=${played ? "0" : nothing}
-      @click=${played ? open : nothing}
-      @keydown=${played ? onActivate(open) : nothing}
+      class="fixture-row ${isNext ? "next" : ""} ${tappable ? "tappable" : ""} ${self ? "self" : ""}"
+      role=${tappable ? "button" : nothing}
+      tabindex=${tappable ? "0" : nothing}
+      title=${tappable && !played ? "Inför matchen" : nothing}
+      @click=${tappable ? open : nothing}
+      @keydown=${tappable ? onActivate(open) : nothing}
     >
       <span class="fixture-when">
         ${live && game.in_progress

@@ -51,8 +51,12 @@ _LIST_TTL = 10 * 60
 # numbers that are read beside the score rather than instead of it.
 SHEET_TTL = 60
 
+# The menu links each league to its live page on a game day and to its
+# overview otherwise (seen 2026-10-06, a Tuesday): the id is the season's
+# either way. Matching only the live link found no league on a quiet day, and
+# that answer was kept for a day.
 _LEAGUE_LINK = re.compile(
-    r"pageVisited\('/ScheduleAndResults/Live/(\d+)'\s*,\s*'([^']+)'\)"
+    r"pageVisited\('/ScheduleAndResults/(?:Live|Overview)/(\d+)'\s*,\s*'([^']+)'\)"
 )
 _GAME_LINK = re.compile(r"/Game/Events/(\d+)")
 # A game on the live page: the home club's name, the link to its page, the away

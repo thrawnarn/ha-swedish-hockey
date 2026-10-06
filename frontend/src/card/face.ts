@@ -154,6 +154,13 @@ export function lastGoal(stateObj: HassEntity) {
   `;
 }
 
+/** The next game as the next-game sensor has it, ready to be previewed. */
+export function nextGameOf(next: HassEntity | undefined): Row | null {
+  const a = next?.attributes;
+  if (!a?.game_id || Number.isNaN(new Date(next!.state).getTime())) return null;
+  return { ...a, start: next!.state };
+}
+
 /** What the footer offers, and the data behind each view. The badge asks the
  *  same question to fill the row of buttons along the top of its dialog. */
 export function barButtons(
@@ -175,6 +182,8 @@ export function barButtons(
   const hasLive = Array.isArray(liveTable) && liveTable.length > 0;
 
   const liveGames = Number(standings?.live_games ?? 0);
+  // Between games, the next one has a page of its own before it is played.
+  const upcoming = showResult ? null : nextGameOf(next);
   const buttons = (
     [
       {
@@ -192,6 +201,15 @@ export function barButtons(
         label: "Händelser",
         badge: Array.isArray(events) && events.length ? String(events.length) : null,
         show: cfg.show_events !== false && Array.isArray(events) && events.length > 0,
+      },
+      {
+        id: "preview",
+        side: "left",
+        icon: "mdi:sword-cross",
+        label: "Matchinfo",
+        badge: null,
+        show: Boolean(upcoming),
+        game: upcoming,
       },
       {
         id: "table",
@@ -223,7 +241,7 @@ export function barButton(ctx: Ctx, b: BarButton) {
     <button
       class="bar-button"
       aria-haspopup="dialog"
-      @click=${() => ctx.ctl.openBarButton(b.id)}
+      @click=${() => (b.game ? ctx.ctl.openPreview(b.game) : ctx.ctl.openBarButton(b.id))}
     >
       <ha-icon icon=${b.icon}></ha-icon>
       <span>${b.label}</span>

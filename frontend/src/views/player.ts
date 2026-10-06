@@ -20,7 +20,9 @@ export class HockeyPlayerView extends PartElement {
       <button class="recap-back" @click=${() => ctl.closePlayer()}>
         <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.recap
           ? "Sammanfattning"
-          : (ctl.team?.row?.team ?? (ctl.tableView === "stats" ? "Statistik" : "Tillbaka"))}
+          : ctl.previewOnTop()
+            ? "Inför matchen"
+            : (ctl.team?.row?.team ?? (ctl.tableView === "stats" ? "Statistik" : "Tillbaka"))}
       </button>
     `;
     if (busy) return html`${back}${loading("Hämtar spelaren…", "hero")}`;

@@ -299,6 +299,73 @@ export function player(name = "Ada Berg") {
   };
 }
 
+/** Two clubs before a game, as get_matchup tells it. */
+export function matchup(gameId) {
+  const game = GAMES.find((g) => g.game_id === gameId) ?? ourGames().find((g) => g.home_score === null);
+  const between = GAMES.filter(
+    (g) =>
+      [g.home_code, g.away_code].includes(game.home_code) &&
+      [g.home_code, g.away_code].includes(game.away_code),
+  );
+  const side = (code, where) => {
+    const row = TABLE.find((r) => r.team_code === code);
+    const club = CLUBS.find((c) => c.code === code);
+    return {
+      team_code: code,
+      team: club.name,
+      logo: club.logo,
+      color: club.color,
+      form: row.form,
+      home_form: row.form.slice(0, 1),
+      away_form: row.form.slice(1),
+      record: { games: 8, wins: 5, overtime_wins: 1, overtime_losses: 1, losses: 1, goals_for: 30, goals_against: 15, points: 20 },
+      home_record: { games: 4, wins: 3, overtime_wins: 0, overtime_losses: 1, losses: 0, goals_for: 14, goals_against: 6, points: 10 },
+      away_record: { games: 4, wins: 2, overtime_wins: 1, overtime_losses: 0, losses: 1, goals_for: 16, goals_against: 9, points: 8 },
+      streak: where === "home" ? { kind: "win", count: 3 } : { kind: "loss", count: 1 },
+      last_game: { result: "win", score: "4-3", opponent: "X", opponent_name: "Någon IF", is_home: true, start: "2026-10-03T16:00:00Z" },
+      rest_days: where === "home" ? 3 : 1,
+      standing: row,
+    };
+  };
+  return {
+    game,
+    home: side(game.home_code, "home"),
+    away: side(game.away_code, "away"),
+    meetings: between.map((g) => ({ ...g, this_game: g.game_id === game.game_id })),
+    season: 2026,
+  };
+}
+
+/** Their meetings in earlier seasons, as the federation's archive gives them. */
+export function headToHeadArchive(team, opponent, count = 9) {
+  const one = CLUBS.find((c) => c.code === team);
+  const other = CLUBS.find((c) => c.code === opponent);
+  const meetings = Array.from({ length: count }, (_, i) => {
+    const [home, away] = i % 2 ? [other, one] : [one, other];
+    const season = 2025 - Math.floor(i / 4);
+    return {
+      season: `${season}-${String(season + 1).slice(2)}`,
+      league: i < 4 ? "SHL" : "HockeyAllsvenskan",
+      series: i === 0 ? "SM-slutspel SHL" : i < 4 ? "SHL" : "HockeyAllsvenskan",
+      start: `${season + 1}-0${1 + (i % 3)}-1${i}T19:00:00+01:00`,
+      home_team: home.name,
+      away_team: away.name,
+      home_code: home.code,
+      away_code: away.code,
+      home_logo: home.logo,
+      away_logo: away.logo,
+      home_score: (i + 3) % 5,
+      away_score: (i + 1) % 4,
+      decided_in: i === 2 ? "OT" : i === 5 ? "SO" : "FT",
+      venue: `${home.name.split(" ")[0]} Arena`,
+    };
+  });
+  return {
+    meetings,
+    seasons: ["2025-26 SHL", "2024-25 SHL", "2025-26 HockeyAllsvenskan", "2024-25 HockeyAllsvenskan"],
+  };
+}
+
 /** What each service answers. A test can replace any of them. */
 export function services() {
   return {
@@ -313,5 +380,7 @@ export function services() {
     get_roster: () => roster(),
     get_recap: () => recap(),
     get_player: (data) => player(data.player),
+    get_matchup: (data) => matchup(data.game_id),
+    get_head_to_head: (data) => headToHeadArchive(data.team, data.opponent),
   };
 }

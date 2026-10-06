@@ -126,6 +126,7 @@ export const cardStyles = css`
       hockey-team-view,
       hockey-recap-view,
       hockey-player-view,
+      hockey-preview-view,
       hockey-game-view,
       hockey-events-view,
       hockey-results-view {
@@ -2291,6 +2292,102 @@ export const cardStyles = css`
         font-size: 0.82em;
         color: var(--secondary-text-color);
         font-variant-numeric: tabular-nums;
+      }
+      /* ---- A game ahead ---- */
+      /* Between games the face's middle opens the next game's preview. */
+      .middle.tappable { cursor: pointer; border-radius: 10px; }
+      .middle.tappable:hover .kickoff { color: var(--primary-color); }
+      .middle.tappable:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+      }
+      .scoreboard.upcoming .sb-team { color: var(--primary-text-color); }
+      .scoreboard.upcoming .sb-score { color: var(--primary-text-color); }
+      /* The time is the score's size, a little smaller: it is not a result. */
+      .sb-score.pv-time { font-size: 2.2em; letter-spacing: 0.01em; }
+      .pv-subhead {
+        padding: 10px 0 0;
+        font-size: 0.78em;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+      }
+      .pv-source {
+        padding-top: 6px;
+        font-size: 0.74em;
+        color: var(--secondary-text-color);
+      }
+      .pv-h2h { padding: 4px 0 2px; }
+      /* The table, club against club: the better figure lit, a label between. */
+      .pv-vs { display: flex; flex-direction: column; flex: none; }
+      .pv-vs-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: baseline;
+        gap: 10px;
+        padding: 6px 4px;
+        border-top: 1px solid var(--divider-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .pv-vs-row:first-child { border-top: none; }
+      .pv-vs-value { font-size: 1.02em; color: var(--secondary-text-color); }
+      .pv-vs-value.away { text-align: right; }
+      .pv-vs-value.lead { color: var(--primary-text-color); font-weight: 700; }
+      .pv-vs-label {
+        font-size: 0.72em;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        text-align: center;
+        color: var(--secondary-text-color);
+      }
+      /* Form: a card for each club, its edge in the club's colour. */
+      .pv-teams {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        flex: none;
+      }
+      .pv-team {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        min-width: 0;
+        padding: 10px 12px 12px;
+        border-radius: 12px;
+        border-top: 3px solid var(--club, var(--primary-color));
+        background: var(--secondary-background-color);
+      }
+      .pv-team-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        font-weight: 600;
+      }
+      .pv-crest { width: 24px; height: 24px; flex: none; object-fit: contain; }
+      .pv-crest.placeholder { border-radius: 50%; background: var(--divider-color); }
+      .pv-team-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pv-fact { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 0.86em; }
+      .pv-fact-label {
+        font-size: 0.74em;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--secondary-text-color);
+      }
+      .pv-fact-value {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        color: var(--primary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .pv-fact-value.warn { color: var(--warning-color, #ffa726); }
+      .pv-form { display: inline-flex; gap: 4px; }
+      .pv-form .form-pip { width: 12px; height: 12px; }
+      .pv-record { color: var(--secondary-text-color); }
+      @media (max-width: 340px) {
+        .pv-teams { grid-template-columns: minmax(0, 1fr); }
       }
       /* A player's figures with where each puts him in the league. */
       .lr-grid {

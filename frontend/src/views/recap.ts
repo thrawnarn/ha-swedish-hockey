@@ -27,7 +27,9 @@ export class HockeyRecapView extends PartElement {
     const { row, data, error, loading: busy } = ctl.recap ?? {};
     const back = html`
       <button class="recap-back" @click=${() => ctl.closeRecap()}>
-        <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.team
+        <ha-icon icon="mdi:chevron-left"></ha-icon>${ctl.previewOnTop()
+          ? "Inför matchen"
+          : ctl.team
           ? (ctl.team.row?.team ?? "Laget")
           : ctl.tableView === "live"
             ? this.dayTitle(ctl.day ?? 0)

@@ -27,6 +27,8 @@ export interface BarButton {
   label: string;
   badge: string | null;
   show: boolean;
+  /** The game a button opens, for one that opens a game. */
+  game?: Game | null;
 }
 
 export interface Ctx {
