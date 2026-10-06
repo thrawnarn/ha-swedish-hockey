@@ -633,9 +633,12 @@ def _find_clip(clips: list[Any], game: Game) -> Any | None:
     return None
 
 
-def _fixture_dict(game: Game) -> dict[str, Any]:
-    """Return a game as a plain dict, from no particular team's point of view."""
-    return {
+def _fixture_dict(game: Game, odds: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Return a game as a plain dict, from no particular team's point of view.
+
+    With the bookmaker's odds by game, a game still to come carries its own.
+    """
+    row = {
         "start": game.start.isoformat(),
         "home_team": game.home.name,
         "away_team": game.away.name,
@@ -655,6 +658,9 @@ def _fixture_dict(game: Game) -> dict[str, Any]:
         "game_id": game.uid,
         "url": game.url,
     }
+    if odds and (found := odds.get(game.uid)):
+        row["odds"] = found
+    return row
 
 
 async def _async_get_schedule(call: ServiceCall) -> ServiceResponse:
@@ -685,6 +691,7 @@ async def _async_get_schedule(call: ServiceCall) -> ServiceResponse:
 
     limit = int(call.data.get(ATTR_LIMIT, 20))
     listed = chosen[:limit]
+    odds = await entry.runtime_data.async_odds()
     clips = (
         await _async_clips(entry)
         if call.data.get(ATTR_HIGHLIGHTS)
@@ -692,7 +699,7 @@ async def _async_get_schedule(call: ServiceCall) -> ServiceResponse:
     )
     return {
         "games": [
-            dict(_fixture_dict(game), highlight=clips.get(game.uid))
+            dict(_fixture_dict(game, odds), highlight=clips.get(game.uid))
             for game in listed
         ],
         # Where the next game sits in what was returned, so a list of a whole
@@ -760,8 +767,9 @@ async def _async_get_matchup(call: ServiceCall) -> ServiceResponse:
         sides[side] = summary
 
     between = meetings(games, game.home.key, game.away.key)
+    odds = await entry.runtime_data.async_odds()
     listed = [
-        dict(_fixture_dict(other), this_game=other.uid == game.uid) for other in between
+        dict(_fixture_dict(other, odds), this_game=other.uid == game.uid) for other in between
     ]
     earlier = [
         fixture
@@ -769,7 +777,7 @@ async def _async_get_matchup(call: ServiceCall) -> ServiceResponse:
         if other.has_result and other.start < game.start
     ]
     return {
-        "game": _fixture_dict(game),
+        "game": _fixture_dict(game, odds),
         "home": sides["home"],
         "away": sides["away"],
         "meetings": listed,
@@ -1172,11 +1180,12 @@ async def _async_get_live(call: ServiceCall) -> ServiceResponse:
     now = dt_util.utcnow()
     today = dt_util.now().date()
     wanted = call.data.get(ATTR_DATE)
+    odds = await entry.runtime_data.async_odds()
     if wanted is not None and wanted != today:
         # Another day is what the schedule says: the results of a day gone,
         # the fixtures of one to come. Nothing to read from the league.
         games = [
-            _fixture_dict(game)
+            _fixture_dict(game, odds)
             for game in (data.games if data else [])
             if dt_util.as_local(game.start).date() == wanted
         ]
@@ -1197,7 +1206,7 @@ async def _async_get_live(call: ServiceCall) -> ServiceResponse:
 
     games = []
     for game in tonight:
-        row = _fixture_dict(game)
+        row = _fixture_dict(game, odds)
         # A game not yet started has a record with 0-0 on it, which is not a
         # score; it keeps its start time instead.
         if (score := scores.get(game.uid)) is not None and (

@@ -2293,6 +2293,66 @@ export const cardStyles = css`
         color: var(--secondary-text-color);
         font-variant-numeric: tabular-nums;
       }
+      /* ---- Odds ---- */
+      .odds {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 4px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--secondary-text-color);
+      }
+      .odds-mark {
+        font-size: 0.8em;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        opacity: 0.7;
+      }
+      .odds .odds-mark:not(:first-child) { margin-left: 6px; }
+      .face-odds { margin-top: 4px; font-size: 0.8em; }
+      .pv-odds {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        flex: none;
+        margin-top: 4px;
+      }
+      .pv-odds-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        min-width: 0;
+        padding: 8px 6px;
+        border-radius: 12px;
+        background: var(--secondary-background-color);
+        border: 1px solid transparent;
+      }
+      .pv-odds-tile.favourite {
+        border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+      }
+      .pv-odds-label {
+        display: flex;
+        gap: 5px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.78em;
+        color: var(--secondary-text-color);
+      }
+      .pv-odds-price {
+        font-size: 1.35em;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--primary-text-color);
+      }
+      .pv-odds-chance {
+        font-size: 0.75em;
+        font-variant-numeric: tabular-nums;
+        color: var(--secondary-text-color);
+      }
+
       /* ---- A game ahead ---- */
       /* Between games the face's middle opens the next game's preview. */
       .middle.tappable { cursor: pointer; border-radius: 10px; }

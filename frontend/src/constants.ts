@@ -9,6 +9,7 @@ export const DEFAULTS = {
   show_table: true,
   show_results: true,
   show_stats: true,
+  show_odds: true,
   result_hours: 6,
 };
 

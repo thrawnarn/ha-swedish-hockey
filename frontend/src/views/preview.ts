@@ -29,6 +29,7 @@ import { badge, tv } from "../parts/common";
 import { fixtureRow } from "../parts/fixture";
 import { playerLink } from "../parts/links";
 import { loading } from "../parts/loading";
+import { oddsBlock } from "../parts/odds";
 import { scoreboard } from "../parts/scoreboard";
 
 // The figures that say most about how a club plays, in the order a reader
@@ -98,6 +99,7 @@ export class HockeyPreviewView extends PartElement {
         extra: tv(ctx, game.tv_channels),
       })}
       ${meta.length ? html`<div class="recap-meta sb-meta">${meta.join(" · ")}</div>` : nothing}
+      ${oddsBlock(this.ctx, game)}
     `;
   }
 

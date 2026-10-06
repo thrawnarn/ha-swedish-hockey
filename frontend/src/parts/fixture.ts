@@ -8,6 +8,7 @@ import { clubKey } from "../teams";
 import { timeFormat } from "../time";
 import type { Game } from "../types";
 import { teamLink } from "./links";
+import { hasOdds, oddsLine } from "./odds";
 
 export interface FixtureOptions {
   isNext?: boolean;
@@ -68,6 +69,8 @@ export function fixtureRow(
       <ha-icon icon="mdi:television-classic"></ha-icon>${game.tv_channels.join(" · ")}
     </span>`);
   }
+  // A game still to come has the bookmaker's odds once betting has opened.
+  const odds = !played && hasOdds(ctx, game.odds) ? game.odds : null;
   const tappable = !still && (played || Boolean(game.game_id));
   const open = played ? () => ctl.loadRecap(game, through) : () => ctl.openPreview(game);
   return html`
@@ -102,11 +105,11 @@ export function fixtureRow(
       <span class="fixture-goals away ${lead === "away" ? "lead" : ""} ${outcome}">
         ${played ? game.away_score : ""}
       </span>
-      ${meta.length || extra || game.highlight
+      ${meta.length || extra || game.highlight || odds
         ? html`<span class="fixture-meta">
             <span class="fixture-detail">${meta}</span>
             <span class="fixture-extra">
-              ${extra}
+              ${odds ? oddsLine(ctx, odds) : nothing} ${extra}
               ${game.highlight
                 ? html`<a
                     class="fixture-clip"

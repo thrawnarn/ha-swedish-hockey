@@ -11,11 +11,13 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
 from .card import async_setup_card, async_unregister_resource
 from .const import CONF_TEAMS, DOMAIN
 from .coordinator import (
+    ODDS_REFRESH,
     LiveScoreCoordinator,
     SwedishHockeyConfigEntry,
     SwedishHockeyCoordinator,
@@ -70,6 +72,13 @@ async def async_setup_entry(
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     entry.async_on_unload(coordinator.push.async_stop)
+    # Svenska Spel's odds for the next round, for the next-game sensors.
+    entry.async_on_unload(
+        async_track_time_interval(hass, coordinator.async_refresh_odds, ODDS_REFRESH)
+    )
+    entry.async_create_background_task(
+        hass, coordinator.async_refresh_odds(), f"{DOMAIN} odds"
+    )
     return True
 
 

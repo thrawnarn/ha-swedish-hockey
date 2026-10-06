@@ -25,6 +25,7 @@ const LABELS: Record<string, string> = {
   show_table: "League table",
   show_results: "Previous results",
   show_stats: "Statistics",
+  show_odds: "Odds (Svenska Spel)",
   result_hours: "Hold result (hours)",
 };
 
@@ -70,6 +71,7 @@ export class HockeyMatchCardEditor extends LitElement {
           { name: "show_table", selector: { boolean: {} } },
           { name: "show_results", selector: { boolean: {} } },
           { name: "show_stats", selector: { boolean: {} } },
+          { name: "show_odds", selector: { boolean: {} } },
         ],
       },
       {

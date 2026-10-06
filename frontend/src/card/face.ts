@@ -10,6 +10,7 @@ import type { BarButton, Ctx, Sources } from "../context";
 import type { EntityIds, HassEntity, Row } from "../types";
 import { relativeDay, timeFormat } from "../time";
 import { badge, tv } from "../parts/common";
+import { oddsLine } from "../parts/odds";
 
 export function resultIsRecent(result: Row | null, hours: number): boolean {
   if (!result || !(hours > 0)) return false;
@@ -102,7 +103,7 @@ export function nextMiddle(ctx: Ctx, stateObj: HassEntity | undefined) {
     </div>
     <div class="date">${start.toLocaleDateString(locale, DATE)}</div>
     ${a.venue ? html`<div class="venue">${a.venue}</div>` : nothing}
-    ${tv(ctx, a.tv_channels)}
+    ${tv(ctx, a.tv_channels)} ${oddsLine(ctx, a.odds, "odds face-odds")}
   `;
 }
 

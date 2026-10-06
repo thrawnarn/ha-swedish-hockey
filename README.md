@@ -13,6 +13,9 @@ league.
 - **Live score.** While a game is on: the score, period and clock, power
   plays, shots and the match log, read every 20 seconds (configurable) and
   pushed sooner when the league's own live feed has a goal first.
+- **Odds.** Svenska Spel's odds on regular time (1X2) for the games it has
+  opened betting on - in practice the next round - on the next-game sensor,
+  in the services' game lists and in the card.
 - **Goal events.** `swedish_hockey_goal` once per goal and
   `swedish_hockey_game_end` at the final whistle, for notifications that do not
   need to poll a sensor.
@@ -58,7 +61,7 @@ Each followed team becomes a device with:
 | Entity | What it is |
 |---|---|
 | `calendar.<team>` | The team's games, the whole season |
-| Next game (`sensor`) | Start time of the next game; opponent, venue, `tv_channels`, `recent_results`, `last_result` as attributes |
+| Next game (`sensor`) | Start time of the next game; opponent, venue, `tv_channels`, `odds`, `recent_results`, `last_result` as attributes |
 | League position (`sensor`) | The team's place; `table` (and `live_table` while games are played) as attributes |
 | Live score (`sensor`) | The score while a game is on; period, clock, shots, power play, `events` |
 | Home goals, Away goals, Period (`sensor`) | The live score as numbers |
@@ -111,6 +114,7 @@ override that for hand-written YAML.
 | `show_table` | `true` | The table button and tab |
 | `show_results` | `true` | The earlier results button |
 | `show_stats` | `true` | The statistics tab and figures |
+| `show_odds` | `true` | Svenska Spel's odds on games still to come |
 | `result_hours` | `6` | How long a finished result stays on the face (0: straight to the next game) |
 
 ### The dashboard resource
@@ -136,7 +140,10 @@ lovelace:
 ## Services
 
 Every service takes the league's `config_entry_id` and returns data
-(`response_variable` in a script or automation).
+(`response_variable` in a script or automation). Games still to come in
+`get_schedule`, `get_live` and `get_matchup` carry `odds` - `home`, `draw`,
+`away` in decimals, the `market` and the `source` - once Svenska Spel has
+opened betting on them.
 
 | Service | Returns |
 |---|---|
@@ -179,6 +186,7 @@ and then edit that message rather than send a second one.
 | `stats.swehockey.se` | The federation's game sheets: period scores, saves, power play time |
 | `stats.swehockey.se` archive | Earlier seasons of both leagues, for meetings between two clubs; each finished season is read once and kept |
 | `tv.nu` | Which channel shows a game (neither league says) |
+| Svenska Spel (Kambi's offering API) | Odds on regular time for the next round; read at most every ten minutes, and only while a game is near |
 
 ## Development
 

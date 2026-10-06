@@ -117,13 +117,20 @@ def _listing(raw: Any, slug: str) -> TvListing | None:
 def match_channels(
     games: list[Game], listings: list[TvListing]
 ) -> dict[str, tuple[str, ...]]:
-    """Return the channels of each game tv.nu lists, keyed by game uid.
+    """Return the channels of each game tv.nu lists, keyed by game uid."""
+    return {uid: listing.channels for uid, listing in pair_listings(games, listings).items()}
 
-    A club plays one game at a time, so among the games starting together one
-    side's name is enough to say which is which. Both sides are still counted,
-    so a name that half fits two games goes to the one that fits it better.
+
+def pair_listings(games: list[Game], listings: list[Any]) -> dict[str, Any]:
+    """Return which listing is which game, keyed by game uid.
+
+    A listing is another site's idea of a game - tv.nu's, a bookmaker's - with
+    a start time and its own spelling of the two clubs. A club plays one game
+    at a time, so among the games starting together one side's name is
+    enough to say which is which. Both sides are still counted, so a name
+    that half fits two games goes to the one that fits it better.
     """
-    candidates: list[tuple[int, str, TvListing]] = []
+    candidates: list[tuple[int, str, Any]] = []
     for game in games:
         for listing in listings:
             if abs(listing.start - game.start) > _SLACK:
@@ -134,14 +141,14 @@ def match_channels(
             if score:
                 candidates.append((score, game.uid, listing))
 
-    channels: dict[str, tuple[str, ...]] = {}
+    paired: dict[str, Any] = {}
     used: set[int] = set()
     for _, uid, listing in sorted(candidates, key=lambda item: -item[0]):
-        if uid in channels or id(listing) in used:
+        if uid in paired or id(listing) in used:
             continue
-        channels[uid] = listing.channels
+        paired[uid] = listing
         used.add(id(listing))
-    return channels
+    return paired
 
 
 def _words(name: str | None) -> set[str]:

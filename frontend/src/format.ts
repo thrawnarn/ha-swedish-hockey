@@ -123,3 +123,18 @@ export function plus(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   return Number(value) > 0 ? `+${value}` : String(value);
 }
+
+/** Decimal odds as a Swedish page writes them: 1,38. */
+export function formatOdds(value: unknown): string {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number.toFixed(2).replace(".", ",") : "–";
+}
+
+/** What a set of odds says each outcome's chance is, in whole per cent: one
+ *  over each price, scaled so the three add up to a hundred - the
+ *  bookmaker's margin taken out. */
+export function impliedChances(prices: number[]): number[] {
+  const inverse = prices.map((price) => (Number(price) > 0 ? 1 / Number(price) : 0));
+  const total = inverse.reduce((sum, value) => sum + value, 0);
+  return total ? inverse.map((value) => Math.round((value / total) * 100)) : prices.map(() => 0);
+}

@@ -10,3 +10,4 @@ export * from "./format";
 export * from "./stats-model";
 export * from "./teams";
 export * from "./time";
+export * from "./matchup";

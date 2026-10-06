@@ -118,6 +118,9 @@ class NextGameSensor(CoordinatorEntity[SwedishHockeyCoordinator], SensorEntity):
             "away_code": game.away.key,
             "venue": game.venue,
             "tv_channels": list(game.tv),
+            # Svenska Spel's odds on regular time, once it has opened betting
+            # on the game - a day or two before it.
+            "odds": self.coordinator.odds.known().get(game.uid),
             "round": game.round,
             "game_state": game.state,
             "home_score": game.home_score,

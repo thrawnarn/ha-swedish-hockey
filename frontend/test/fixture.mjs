@@ -90,6 +90,15 @@ export const GAMES = (() => {
 
 export const NEXT_INDEX = GAMES.findIndex((g) => g.home_score === null);
 
+/** The bookmaker's odds, as the services carry them, on the next games: the
+ *  next round in the league and our own next game. */
+export const ODDS = { home: 1.38, draw: 5.8, away: 6.75, market: "Ordinarie tid", source: "Svenska Spel", updated: "2026-10-05T17:30:00Z" };
+const isOurs = (g) => g.home_code === "NOR" || g.away_code === "NOR";
+for (const game of GAMES.filter((g) => g.home_score === null && !isOurs(g)).slice(0, 2)) {
+  game.odds = { ...ODDS };
+}
+GAMES.find((g) => g.home_score === null && isOurs(g)).odds = { ...ODDS, home: 2.1, draw: 4.2, away: 2.9 };
+
 export const ourGames = () =>
   GAMES.filter((g) => g.home_code === OURS.code || g.away_code === OURS.code);
 

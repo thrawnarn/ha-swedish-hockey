@@ -38,6 +38,7 @@ from .push import (
     overview_is_game,
 )
 from .league_stats import LeagueStatistics
+from .odds import OddsBook
 from .matchup import form_of as _form_of
 from .swehockey import SHEET_TTL, GameSheet, SwehockeyClient
 from .tv import async_tv_listings, match_channels
@@ -72,6 +73,10 @@ EVENT_GAME_END = f"{DOMAIN}_game_end"
 # Fired when more is known about a goal already announced: the scorer, the
 # assists or the strength, which the push stream often sends without.
 EVENT_GOAL_UPDATED = f"{DOMAIN}_goal_updated"
+# Odds are read while a game is this close, and every ODDS_REFRESH then.
+ODDS_AHEAD = timedelta(days=3)
+ODDS_AFTER = timedelta(hours=1)
+ODDS_REFRESH = timedelta(minutes=30)
 # How long an update waits for a reference to the message it should edit.
 _REFERENCE_WAIT = 60
 # A goal the stream has counted but not described yet is held this long for
@@ -154,6 +159,8 @@ class SwedishHockeyCoordinator(DataUpdateCoordinator[LeagueData]):
         self.statistics = LeagueStatistics(
             self.client, lambda: self.data.teams if self.data else {}
         )
+        # Svenska Spel's odds for the games it has opened betting on.
+        self.odds = OddsBook(async_get_clientsession(hass), self.league)
         super().__init__(
             hass,
             _LOGGER,
@@ -161,6 +168,28 @@ class SwedishHockeyCoordinator(DataUpdateCoordinator[LeagueData]):
             config_entry=entry,
             update_interval=SCAN_INTERVAL,
         )
+
+    async def async_odds(self) -> dict[str, dict[str, Any]]:
+        """Return the bookmaker's odds for games still to come, by game uid."""
+        return await self.odds.async_odds(self.data.games if self.data else [])
+
+    async def async_refresh_odds(self, _now: Any = None) -> None:
+        """Read the odds again while a game is near, and tell the sensors.
+
+        The bookmaker opens betting a day or two before a round, so nothing is
+        asked for while the next game is further off than that; the services
+        still read the odds whenever a card asks for a list.
+        """
+        if not self.data:
+            return
+        now = dt_util.utcnow()
+        if not any(
+            not game.has_result and now - ODDS_AFTER < game.start < now + ODDS_AHEAD
+            for game in self.data.games
+        ):
+            return
+        await self.async_odds()
+        self.async_update_listeners()
 
     async def async_goal_log(self) -> dict[str, Any]:
         """Return what has been announced, game by game, loading it once."""

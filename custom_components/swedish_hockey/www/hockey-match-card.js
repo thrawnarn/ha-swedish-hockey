@@ -587,6 +587,7 @@ var DEFAULTS = {
   show_table: true,
   show_results: true,
   show_stats: true,
+  show_odds: true,
   result_hours: 6
 };
 var PLATFORM = "swedish_hockey";
@@ -722,6 +723,15 @@ function crowd(value) {
 function plus(value) {
   if (value === null || value === void 0 || value === "") return "";
   return Number(value) > 0 ? `+${value}` : String(value);
+}
+function formatOdds(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number.toFixed(2).replace(".", ",") : "\u2013";
+}
+function impliedChances(prices) {
+  const inverse = prices.map((price) => Number(price) > 0 ? 1 / Number(price) : 0);
+  const total = inverse.reduce((sum, value) => sum + value, 0);
+  return total ? inverse.map((value) => Math.round(value / total * 100)) : prices.map(() => 0);
 }
 
 // src/styles.ts
@@ -3001,6 +3011,66 @@ var cardStyles = i`
         color: var(--secondary-text-color);
         font-variant-numeric: tabular-nums;
       }
+      /* ---- Odds ---- */
+      .odds {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 4px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--secondary-text-color);
+      }
+      .odds-mark {
+        font-size: 0.8em;
+        font-weight: 600;
+        color: var(--secondary-text-color);
+        opacity: 0.7;
+      }
+      .odds .odds-mark:not(:first-child) { margin-left: 6px; }
+      .face-odds { margin-top: 4px; font-size: 0.8em; }
+      .pv-odds {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        flex: none;
+        margin-top: 4px;
+      }
+      .pv-odds-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        min-width: 0;
+        padding: 8px 6px;
+        border-radius: 12px;
+        background: var(--secondary-background-color);
+        border: 1px solid transparent;
+      }
+      .pv-odds-tile.favourite {
+        border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
+      }
+      .pv-odds-label {
+        display: flex;
+        gap: 5px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.78em;
+        color: var(--secondary-text-color);
+      }
+      .pv-odds-price {
+        font-size: 1.35em;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--primary-text-color);
+      }
+      .pv-odds-chance {
+        font-size: 0.75em;
+        font-variant-numeric: tabular-nums;
+        color: var(--secondary-text-color);
+      }
+
       /* ---- A game ahead ---- */
       /* Between games the face's middle opens the next game's preview. */
       .middle.tappable { cursor: pointer; border-radius: 10px; }
@@ -4257,6 +4327,48 @@ function tv(ctx, channels) {
   </div>`;
 }
 
+// src/parts/odds.ts
+function hasOdds(ctx, odds) {
+  return ctx.config.show_odds !== false && Boolean(odds) && [odds.home, odds.draw, odds.away].every((price) => Number(price) > 0);
+}
+var title = (odds) => `Odds fr\xE5n ${odds.source ?? "Svenska Spel"}${odds.market ? `, ${odds.market.toLowerCase()}` : ""}`;
+function oddsLine(ctx, odds, cls = "odds") {
+  if (!hasOdds(ctx, odds)) return A;
+  return b2`<span class=${cls} title=${title(odds)}>
+    <span class="odds-mark">1</span> ${formatOdds(odds.home)}
+    <span class="odds-mark">X</span> ${formatOdds(odds.draw)}
+    <span class="odds-mark">2</span> ${formatOdds(odds.away)}
+  </span>`;
+}
+function oddsBlock(ctx, game) {
+  const odds = game.odds;
+  if (!hasOdds(ctx, odds)) return A;
+  const chances = impliedChances([odds.home, odds.draw, odds.away]);
+  const tiles = [
+    ["1", game.home_team ?? "Hemma", odds.home, chances[0]],
+    ["X", "Oavgjort", odds.draw, chances[1]],
+    ["2", game.away_team ?? "Borta", odds.away, chances[2]]
+  ];
+  const favourite = Math.max(...chances);
+  return b2`
+    <div class="pv-odds" title=${title(odds)}>
+      ${tiles.map(
+    ([mark, label, price, chance]) => b2`
+          <div class="pv-odds-tile ${chance === favourite ? "favourite" : ""}">
+            <span class="pv-odds-label"><span class="odds-mark">${mark}</span> ${label}</span>
+            <span class="pv-odds-price">${formatOdds(price)}</span>
+            <span class="pv-odds-chance">${chance} %</span>
+          </div>
+        `
+  )}
+    </div>
+    <div class="pv-source">
+      Odds från ${odds.source ?? "Svenska Spel"}${odds.market ? `, ${odds.market.toLowerCase()}` : ""}.
+      Procenten är vad oddsen säger om chansen, med spelbolagets marginal borträknad.
+    </div>
+  `;
+}
+
 // src/card/face.ts
 function resultIsRecent(result, hours) {
   if (!result || !(hours > 0)) return false;
@@ -4330,7 +4442,7 @@ function nextMiddle(ctx, stateObj) {
     </div>
     <div class="date">${start.toLocaleDateString(locale, DATE)}</div>
     ${a3.venue ? b2`<div class="venue">${a3.venue}</div>` : A}
-    ${tv(ctx, a3.tv_channels)}
+    ${tv(ctx, a3.tv_channels)} ${oddsLine(ctx, a3.odds, "odds face-odds")}
   `;
 }
 function shots(ctx, stateObj) {
@@ -4344,8 +4456,8 @@ function shots(ctx, stateObj) {
   const awayTotal = Number(s4.away_total ?? 0);
   const a3 = stateObj?.attributes ?? {};
   const sides = `${a3.home_code ?? a3.home_team ?? "hemma"} ${home} - ${a3.away_code ?? a3.away_team ?? "borta"} ${away}`;
-  const title = homeTotal || awayTotal ? `Skott p\xE5 m\xE5l: ${sides}. Skottf\xF6rs\xF6k ${homeTotal}-${awayTotal}` : `Skott p\xE5 m\xE5l: ${sides}`;
-  return b2`<div class="shots" title=${title}>(skott ${home}-${away})</div>`;
+  const title2 = homeTotal || awayTotal ? `Skott p\xE5 m\xE5l: ${sides}. Skottf\xF6rs\xF6k ${homeTotal}-${awayTotal}` : `Skott p\xE5 m\xE5l: ${sides}`;
+  return b2`<div class="shots" title=${title2}>(skott ${home}-${away})</div>`;
 }
 function lastGoal(stateObj) {
   const a3 = stateObj.attributes ?? {};
@@ -4867,7 +4979,7 @@ var HockeyTeamPicker = class extends PartElement {
     const { ctl } = this.ctx;
     const spec = ctl.pickerSpec();
     if (!spec) return A;
-    const { title, clubs, chosen, set } = spec;
+    const { title: title2, clubs, chosen, set } = spec;
     const ours = clubKey(ctl.teamRef());
     const toggle = (key) => {
       const now = ctl.pickerSpec()?.chosen ?? [];
@@ -4876,7 +4988,7 @@ var HockeyTeamPicker = class extends PartElement {
     return b2`
       <dialog
         class="picker"
-        aria-label=${title}
+        aria-label=${title2}
         @close=${() => {
       ctl.picker = null;
     }}
@@ -4885,7 +4997,7 @@ var HockeyTeamPicker = class extends PartElement {
     }}
       >
         <div class="picker-head">
-          <span class="picker-title">${title}</span>
+          <span class="picker-title">${title2}</span>
           <span class="picker-count">
             ${chosen.length ? `${chosen.length} av ${clubs.length} lag valda` : "Alla lag"}
           </span>
@@ -4937,6 +5049,7 @@ var LABELS = {
   show_table: "League table",
   show_results: "Previous results",
   show_stats: "Statistics",
+  show_odds: "Odds (Svenska Spel)",
   result_hours: "Hold result (hours)"
 };
 var HELPERS = {
@@ -4970,7 +5083,8 @@ var HockeyMatchCardEditor = class extends i4 {
           { name: "show_events", selector: { boolean: {} } },
           { name: "show_table", selector: { boolean: {} } },
           { name: "show_results", selector: { boolean: {} } },
-          { name: "show_stats", selector: { boolean: {} } }
+          { name: "show_stats", selector: { boolean: {} } },
+          { name: "show_odds", selector: { boolean: {} } }
         ]
       },
       {
@@ -5619,6 +5733,7 @@ function fixtureRow(ctx, game, teamCode, options = {}) {
       <ha-icon icon="mdi:television-classic"></ha-icon>${game.tv_channels.join(" \xB7 ")}
     </span>`);
   }
+  const odds = !played && hasOdds(ctx, game.odds) ? game.odds : null;
   const tappable = !still && (played || Boolean(game.game_id));
   const open = played ? () => ctl.loadRecap(game, through) : () => ctl.openPreview(game);
   return b2`
@@ -5647,10 +5762,10 @@ function fixtureRow(ctx, game, teamCode, options = {}) {
       <span class="fixture-goals away ${lead === "away" ? "lead" : ""} ${outcome}">
         ${played ? game.away_score : ""}
       </span>
-      ${meta.length || extra || game.highlight ? b2`<span class="fixture-meta">
+      ${meta.length || extra || game.highlight || odds ? b2`<span class="fixture-meta">
             <span class="fixture-detail">${meta}</span>
             <span class="fixture-extra">
-              ${extra}
+              ${odds ? oddsLine(ctx, odds) : A} ${extra}
               ${game.highlight ? b2`<a
                     class="fixture-clip"
                     href=${game.highlight.url}
@@ -5719,6 +5834,7 @@ var HockeyPreviewView = class extends PartElement {
       extra: tv(ctx, game.tv_channels)
     })}
       ${meta.length ? b2`<div class="recap-meta sb-meta">${meta.join(" \xB7 ")}</div>` : A}
+      ${oddsBlock(this.ctx, game)}
     `;
   }
   // ---- The table ----------------------------------------------------------------

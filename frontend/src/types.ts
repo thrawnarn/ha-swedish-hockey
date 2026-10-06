@@ -68,6 +68,7 @@ export interface CardConfig {
   show_table?: boolean;
   show_results?: boolean;
   show_stats?: boolean;
+  show_odds?: boolean;
   result_hours?: number;
   [key: string]: unknown;
 }

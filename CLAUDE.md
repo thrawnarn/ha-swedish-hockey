@@ -30,7 +30,8 @@ before any push.
 | `push.py` | The s8y live feed (Server-Sent Events) laid over the polled live game |
 | `swehockey.py`, `stats.py` | The federation's game sheet, and the figures made from it |
 | `league_stats.py` | `get_statistics`: the statnet tables both leagues publish |
-| `tv.py` | TV channels from tv.nu, paired with games by time and club name |
+| `tv.py` | TV channels from tv.nu, paired with games by time and club name; `pair_listings` pairs any other site's games the same way |
+| `odds.py` | Svenska Spel's odds (Kambi's offering API, `listView/ice_hockey/sweden/<league>`): the regular-time 1X2 market, cached ten minutes, paired with games via `pair_listings`; the coordinator refreshes them every 30 min only while a game is within three days |
 | `matchup.py` | Pure: two clubs before a game - form, records, runs, rest, meetings - from the season in memory (`get_matchup`); the table's form comes from here too |
 | `archive.py` | Earlier seasons from the federation's archive (`get_head_to_head`): season picker, series, schedule pages; finished series are read once and kept in `.storage/swedish_hockey.archive` |
 | `services.py` | Every service; normalised dictionaries for both leagues |
@@ -50,6 +51,7 @@ The card (`frontend/src/`):
 | `parts/*.ts` | Markup shared by the views: fixture rows, scoreboard, stat bars, timeline, filter row, `<hockey-loading>` |
 | `styles.ts` | The one stylesheet |
 | `format.ts`, `stats-model.ts`, `teams.ts`, `time.ts`, `constants.ts`, `matchup.ts` | Pure helpers and tables, tested directly |
+| `parts/odds.ts` | Odds on a row, on the face and as the preview's tiles; nothing at all with `show_odds: false` |
 
 ## Conventions
 
