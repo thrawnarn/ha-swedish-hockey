@@ -112,10 +112,9 @@ export class HockeyDialog extends PartElement {
     }
   }
 
-  // The sections as a row of buttons in the dialog. The badge has no card face
-  // to carry them, so it always shows them - along the top; the card shows
-  // them only on a phone, where the dialog covers the card, and there they are
-  // a tab bar along the bottom, as an app would have them.
+  // The sections as an app's navigation: down the left side of the dialog on
+  // a wide screen, a tab bar along the bottom on a phone, where the dialog
+  // covers the card.
   private nav() {
     const { ctl } = this.ctx;
     const tabs = this.tabs();

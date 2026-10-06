@@ -1,9 +1,8 @@
 /** Scrolling the dialog's panel to the part of a list worth seeing first. */
 
 /** Put a view's next game at the top of the panel, its day's heading with it
- *  where it is the day's first game, clear of the view switch where that is
- *  shown and held at the top. Returns false if there is nothing to scroll to
- *  yet, so the caller asks again after its next render. */
+ *  where it is the day's first game. Returns false if there is nothing to
+ *  scroll to yet, so the caller asks again after its next render. */
 export function scrollToNext(view: HTMLElement): boolean {
   let row = view.querySelector<HTMLElement>(".fixture-row.next");
   if (row?.previousElementSibling?.classList.contains("team-section")) {
@@ -11,8 +10,7 @@ export function scrollToNext(view: HTMLElement): boolean {
   }
   const panel = view.closest<HTMLElement>(".panel");
   if (!row || !panel) return false;
-  const held = panel.querySelector<HTMLElement>(".section-switch")?.offsetHeight ?? 0;
-  panel.scrollTop = row.offsetTop - panel.offsetTop - 8 - held;
+  panel.scrollTop = row.offsetTop - panel.offsetTop - 8;
   return true;
 }
 

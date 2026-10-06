@@ -32,57 +32,14 @@ export const phoneDialogStyles = css`
     .dialog-close { top: calc(6px + env(safe-area-inset-top, 0px)); }
     .panel { padding-top: calc(44px + env(safe-area-inset-top, 0px)); }
     .panel.tight { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
-    /* The scoreboard has no line of its own to share with the close button,
-       as a back button or a heading does, so it starts below it. */
-    .panel > .scoreboard:first-child,
-    .panel > hockey-game-view:first-child > .scoreboard:first-child { margin-top: 32px; }
-    .section-switch { display: none; }
-    .section-heading { display: block; }
+    /* The sections are a tab bar along the bottom. */
     .dialog-nav {
-      display: flex;
       order: 1;
-      flex: none;
       flex-wrap: nowrap;
-      gap: 0;
       padding: 4px 4px calc(6px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--divider-color);
-      background: var(--ha-card-background, var(--card-background-color, #fff));
     }
-    .dialog-nav .bar-button {
-      position: relative;
-      flex: 1 1 0;
-      min-width: 0;
-      flex-direction: column;
-      gap: 3px;
-      padding: 6px 2px 4px;
-      border-radius: 12px;
-      background: none;
-      font-size: 0.72em;
-    }
-    .dialog-nav .bar-button > span:not(.bar-badge) {
-      max-width: 100%;
-      /* The button's line-height of 1 clips descenders at this size. */
-      line-height: 1.3;
-    }
-    .dialog-nav .bar-button ha-icon {
-      --mdc-icon-size: 22px;
-      padding: 3px 18px;
-      border-radius: 14px;
-      transition: background-color 0.15s ease;
-    }
-    .dialog-nav .bar-button.active { background: none; color: var(--primary-color); }
-    .dialog-nav .bar-button.active ha-icon {
-      background: color-mix(in srgb, var(--primary-color) 18%, transparent);
-    }
-    .dialog-nav .bar-badge {
-      position: absolute;
-      top: 2px;
-      left: calc(50% + 10px);
-      padding: 1px 5px;
-      font-size: 0.85em;
-      color: #fff;
-      background: var(--error-color, #e53935);
-    }
+    .dialog-nav .bar-button { flex: 1 1 0; }
     /* The tab bar under the panel keeps clear of the home indicator. */
     .filter-bar { padding-bottom: 10px; }
     /* The club list comes up from the foot of the screen, as a phone's own
@@ -430,11 +387,69 @@ export const cardStyles = css`
       /* A view that opens with its own back button or heading shares the
          close button's line and can start at the top. */
       .panel.tight { padding-top: 12px; }
-      /* Only the badge shows the sections in the dialog on a wide screen;
-         the card has them on its face. */
-      .dialog-nav { display: none; }
-      /* Shown instead of the switch wherever the tab bar is. */
-      .section-heading { display: none; }
+      /* The scoreboard has no line of its own to share with the close button,
+         as a back button or a heading does, so it starts below it. */
+      .panel > .scoreboard:first-child,
+      .panel > hockey-game-view:first-child > .scoreboard:first-child { margin-top: 32px; }
+      /* The sections as an app's navigation: an icon over its name, the open
+         one's icon in a pill. Down the left side of the dialog on a wide
+         screen; phoneDialogStyles lays them along the bottom on a phone. */
+      .dialog-nav {
+        display: flex;
+        flex: none;
+        gap: 0;
+        background: var(--ha-card-background, var(--card-background-color, #fff));
+      }
+      .dialog-nav .bar-button {
+        position: relative;
+        min-width: 0;
+        flex-direction: column;
+        gap: 3px;
+        padding: 6px 2px 4px;
+        border-radius: 12px;
+        background: none;
+        font-size: 0.72em;
+      }
+      .dialog-nav .bar-button > span:not(.bar-badge) {
+        max-width: 100%;
+        /* The button's line-height of 1 clips descenders at this size. */
+        line-height: 1.3;
+      }
+      .dialog-nav .bar-button ha-icon {
+        --mdc-icon-size: 22px;
+        padding: 3px 18px;
+        border-radius: 14px;
+        transition: background-color 0.15s ease;
+      }
+      .dialog-nav .bar-button.active { background: none; color: var(--primary-color); }
+      .dialog-nav .bar-button.active ha-icon {
+        background: color-mix(in srgb, var(--primary-color) 18%, transparent);
+      }
+      .dialog-nav .bar-badge {
+        position: absolute;
+        top: 2px;
+        left: calc(50% + 10px);
+        padding: 1px 5px;
+        font-size: 0.85em;
+        color: #fff;
+        background: var(--error-color, #e53935);
+      }
+      @media (min-width: 601px) {
+        /* Wider by the rail, so the view keeps the width it had. */
+        dialog:not(.picker) { width: min(612px, calc(100vw - 32px)); }
+        dialog:not(.picker)[open] { flex-direction: row; }
+        .dialog-nav {
+          order: -1;
+          flex-direction: column;
+          width: 84px;
+          box-sizing: border-box;
+          padding: 12px 4px;
+          gap: 2px;
+          overflow-y: auto;
+          border-right: 1px solid var(--divider-color);
+        }
+        .dialog-nav .bar-button { flex: none; padding: 8px 2px 6px; }
+      }
       .view-heading {
         padding-right: 36px;
         margin-bottom: 6px;
@@ -1397,36 +1412,11 @@ export const cardStyles = css`
         line-height: 1;
         cursor: pointer;
       }
-      /* Where the switch is the way between the views, it stays at the top
-         of the panel as the long schedule scrolls, beside the close button. */
-      .switch.section-switch {
-        position: sticky;
-        top: -44px;
-        z-index: 1;
-        flex: none;
-        margin: 0 -20px;
-        padding: 6px 48px 8px 20px;
-        background: var(--card-background-color, var(--ha-card-background, #1c1c1c));
-      }
       .switch button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 5px;
-      }
-      .switch-badge {
-        min-width: 15px;
-        padding: 1px 4px;
-        border-radius: 8px;
-        background: var(--error-color, #db4437);
-        color: #fff;
-        font-size: 0.85em;
-        font-weight: 600;
-        line-height: 1.3;
-      }
-      .switch button.active .switch-badge {
-        background: var(--text-primary-color, #fff);
-        color: var(--primary-color);
       }
       .switch button.active {
         background: var(--primary-color);
@@ -2556,21 +2546,4 @@ export const badgeStyles = css`
           line-height: normal;
           white-space: normal;
         }
-        /* The badge's sections head the dialog on a wide screen; the nav
-           comes after the view in the markup, for the phone's tab bar. */
-        .dialog-nav {
-          display: flex;
-          order: -1;
-          flex-wrap: wrap;
-          flex: none;
-          gap: 6px;
-          /* Clear of the floating close button in the corner. */
-          padding: 10px 52px 6px 14px;
-        }
-        .panel,
-        .panel.tight { padding-top: 8px; }
-        /* The tabs choose the view, so the table's own switch gives way to a
-           heading. */
-        .section-switch { display: none; }
-        .section-heading { display: block; }
 `;

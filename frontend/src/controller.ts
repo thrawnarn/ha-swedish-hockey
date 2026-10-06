@@ -345,15 +345,6 @@ export class HockeyController {
     if (id === "live") this.watchLive();
   }
 
-  /** The table view's own switch, where there is no tab bar. */
-  showTableView(view: TableView): void {
-    this.tableView = view;
-    if (view === "live") this.watchLive();
-    else this.stopLive();
-    if (view === "schedule") this.loadSchedule();
-    if (view === "stats") this.loadStats();
-  }
-
   // ---- The table over the last few games ----------------------------------
 
   // The table as it would stand over the last few games only. Nobody
