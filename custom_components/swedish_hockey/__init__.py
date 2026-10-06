@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
-from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import (
@@ -15,6 +13,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.typing import ConfigType
 
+from .card import async_setup_card, async_unregister_resource
 from .const import CONF_TEAMS, DOMAIN
 from .coordinator import (
     LiveScoreCoordinator,
@@ -34,31 +33,13 @@ PLATFORMS: list[Platform] = [Platform.CALENDAR, Platform.SENSOR, Platform.SWITCH
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-# The Lovelace card and badge live in this integration's own www/ folder
-# rather than in /config/www, so they travel with the component. That means
-# serving them ourselves: nothing outside /config/www is web-accessible by
-# default. Add /swedish_hockey/frontend/hockey-match-card.js as a dashboard
-# resource (JavaScript module) to use them.
-FRONTEND_URL = f"/{DOMAIN}/frontend"
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration's services and serve its card."""
+    """Register the integration's services, and serve and register its card."""
     async_setup_services(hass)
     # Once per Home Assistant run, which async_setup is: registering the same
-    # path twice raises.
-    await hass.http.async_register_static_paths(
-        [
-            StaticPathConfig(
-                FRONTEND_URL,
-                str(Path(__file__).parent / "www"),
-                # The card is rebuilt in place during development; a cached
-                # copy of yesterday's card is a confusing thing to debug. The
-                # dashboard resource's ?v= is what browsers cache by.
-                False,
-            )
-        ]
-    )
+    # static path twice raises.
+    await async_setup_card(hass)
     return True
 
 
@@ -97,6 +78,19 @@ async def async_unload_entry(
 ) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(
+    hass: HomeAssistant, entry: SwedishHockeyConfigEntry
+) -> None:
+    """Take the card off the dashboards with the last league removed."""
+    others = [
+        other
+        for other in hass.config_entries.async_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ]
+    if not others:
+        await async_unregister_resource(hass)
 
 
 async def async_reload_entry(

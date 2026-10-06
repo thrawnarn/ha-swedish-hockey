@@ -32,7 +32,7 @@ card, and commit.
 
 ```sh
 git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin main --tags
+git push origin main --tags   # origin: git@github.com:thrawnarn/ha-swedish-hockey.git
 ```
 
 The repo's `core.sshCommand` uses `/data/home/.ssh/swedish_hockey_config`,

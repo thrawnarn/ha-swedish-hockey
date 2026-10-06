@@ -8,7 +8,9 @@ calendars, next-game, standings and live-score sensors, goal events and
 services that answer with the leagues' data. It includes a Lovelace card and
 badge, written in TypeScript and Lit in `frontend/` and built into
 `custom_components/swedish_hockey/www/hockey-match-card.js`, which the
-integration serves at `/swedish_hockey/frontend/`.
+integration serves at `/swedish_hockey/frontend/` and keeps registered as a
+dashboard resource (`card.py`). The GitHub repository is
+`thrawnarn/ha-swedish-hockey`.
 This is meant to become a public repository, so read the `hockey-release` skill
 before any push.
 
@@ -30,6 +32,7 @@ before any push.
 | `league_stats.py` | `get_statistics`: the statnet tables both leagues publish |
 | `tv.py` | TV channels from tv.nu, paired with games by time and club name |
 | `services.py` | Every service; normalised dictionaries for both leagues |
+| `card.py` | Serves `www/` and keeps one Lovelace resource for the card, versioned by the build's fingerprint; takes over hand-added copies; removed with the last entry |
 | `sensor.py`, `calendar.py`, `switch.py` | The entities |
 
 The card (`frontend/src/`):
@@ -68,6 +71,12 @@ The card (`frontend/src/`):
   the card's shadow root (`LightElement`), so `styles.ts` reaches them all;
   view elements are `display: contents` so their rows sit directly in the
   dialog's flex panel, which the sticky filter row depends on.
+- **The card's resource is the integration's.** `card.py` rewrites any
+  resource ending in `hockey-match-card.js` to the served URL at every start,
+  and only ever writes to Lovelace's collection after it has been loaded
+  (writing first would save over the user's resources). It touches nothing
+  in YAML mode. Keep both rules if you change it; `tests/test_card.py`
+  checks them.
 - **State changes go through the controller.** Its state fields are accessors
   that ask the card to render again; views read them and call its methods.
   Every fetch is stamped (`newRequest`/`stale`) so a late reply cannot

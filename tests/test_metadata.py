@@ -76,7 +76,16 @@ check("the built card is in www/, which the integration serves", os.path.isfile(
 head = open(card, encoding="utf-8").read(300) if os.path.isfile(card) else ""
 check("it is the build, not a hand-edited file", "GENERATED from frontend/src" in head)
 init = open(os.path.join(COMP, "__init__.py"), encoding="utf-8").read()
-check("__init__ serves www/ at /swedish_hockey/frontend", 'f"/{DOMAIN}/frontend"' in init and '"www"' in init)
+check("setup serves and registers the card", "await async_setup_card(hass)" in init)
 check("http, which serves it, is a dependency", "http" in manifest.get("dependencies", []))
+check(
+    "lovelace, whose resources it keeps, is set up first where it is used",
+    "lovelace" in manifest.get("dependencies", []) + manifest.get("after_dependencies", []),
+)
+check(
+    "the manifest points at the ha-swedish-hockey repository",
+    manifest.get("documentation") == "https://github.com/thrawnarn/ha-swedish-hockey"
+    and manifest.get("issue_tracker") == "https://github.com/thrawnarn/ha-swedish-hockey/issues",
+)
 
 done()

@@ -36,8 +36,8 @@ league.
 
 ### HACS
 
-1. In HACS, open the menu → **Custom repositories**, add this repository's URL
-   with type **Integration**.
+1. In HACS, open the menu → **Custom repositories**, add
+   `https://github.com/thrawnarn/ha-swedish-hockey` with type **Integration**.
 2. Install **Svensk hockey** and restart Home Assistant.
 
 ### Manual
@@ -76,17 +76,14 @@ differently from one payload to the next.
 
 ## The card
 
-The integration serves its own card. Add it once as a dashboard resource:
-**Settings → Dashboards → ⋮ → Resources → Add resource**, URL
-`/swedish_hockey/frontend/hockey-match-card.js`, type **JavaScript module**.
-Then add the card from the card picker (**Hockey Match**), or in YAML:
+The integration serves its own card and badge, and adds them to your
+dashboards' resources by itself: install the integration, restart, and
+**Hockey Match** is in the card picker and the badge picker. Or in YAML:
 
 ```yaml
 type: custom:hockey-match-card
 team: LIF
 ```
-
-and the badge (**Hockey Match** in the badge picker):
 
 ```yaml
 type: custom:hockey-match-badge
@@ -110,9 +107,25 @@ override that for hand-written YAML.
 | `show_stats` | `true` | The statistics tab and figures |
 | `result_hours` | `6` | How long a finished result stays on the face (0: straight to the next game) |
 
-After updating the integration, bump a `?v=` on the resource URL (for example
-`/swedish_hockey/frontend/hockey-match-card.js?v=2`) so browsers fetch the new
-card rather than a cached one.
+### The dashboard resource
+
+At every start the integration makes sure there is exactly one resource for
+the card: `/swedish_hockey/frontend/hockey-match-card.js?v=…`, where `v` is a
+fingerprint of the card it serves. An update brings a new card and so a new
+URL, and browsers load it rather than a cached copy. A resource you added by
+hand for an older copy of the card (any URL ending in `hockey-match-card.js`)
+is turned into this one, since two copies cannot both load. Removing the
+integration removes the resource.
+
+This works for dashboards in storage mode, the default. If your dashboards are
+in YAML mode, add the resource yourself:
+
+```yaml
+lovelace:
+  resources:
+    - url: /swedish_hockey/frontend/hockey-match-card.js
+      type: module
+```
 
 ## Services
 
@@ -162,6 +175,7 @@ and then edit that message rather than send a second one.
 
 ```
 custom_components/swedish_hockey/   the integration
+  card.py                           serves the card, keeps its dashboard resource
   www/hockey-match-card.js          the built card (generated, committed)
   brand/                            the icon (rendered from assets/icon.svg)
 frontend/                           the card's TypeScript source

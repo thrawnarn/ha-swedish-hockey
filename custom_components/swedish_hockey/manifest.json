@@ -1,6 +1,9 @@
 {
   "domain": "swedish_hockey",
   "name": "Svensk hockey",
+  "after_dependencies": [
+    "lovelace"
+  ],
   "codeowners": [
     "@thrawnarn"
   ],
@@ -8,10 +11,10 @@
   "dependencies": [
     "http"
   ],
-  "documentation": "https://github.com/thrawnarn/swedish-hockey",
+  "documentation": "https://github.com/thrawnarn/ha-swedish-hockey",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/thrawnarn/swedish-hockey/issues",
+  "issue_tracker": "https://github.com/thrawnarn/ha-swedish-hockey/issues",
   "requirements": [],
   "version": "1.1.0"
 }

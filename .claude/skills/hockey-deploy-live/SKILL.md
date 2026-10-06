@@ -18,9 +18,11 @@ cd frontend && npm run typecheck && npm test && npm run build
 
 That writes `custom_components/swedish_hockey/www/hockey-match-card.js`, served
 at `/swedish_hockey/frontend/hockey-match-card.js` with caching off. Browsers
-still keep the module the dashboard resource URL points at, so bump the `?v=`
-on that resource (Settings → Dashboards → Resources, or the
-dashboard-resource tool) and say a hard refresh may be needed. No restart.
+still keep the module the dashboard resource URL points at. The integration
+sets that URL's `?v=` to the build's fingerprint, but only when Home Assistant
+starts; without a restart, change the `?v=` by hand (Settings → Dashboards →
+Resources, or the dashboard-resource tool) and say a hard refresh may be
+needed. The next start sets it back to the fingerprint, which is fine.
 
 ## Python changes need a restart
 
@@ -36,5 +38,6 @@ A restart interrupts everything else in the house too; check nothing else
 - Nothing was logged: search the system log for `swedish_hockey`.
 - The sensors have values (next game, league position).
 - For the card: fetch `/swedish_hockey/frontend/hockey-match-card.js` and check
-  it is the new build (the first line says GENERATED), then render the real
-  dashboard card against the real states.
+  it is the new build (the first line says GENERATED); after a restart, check
+  the dashboard resources hold exactly one `hockey-match-card.js`, at
+  `/swedish_hockey/frontend/hockey-match-card.js?v=<fingerprint>`.
