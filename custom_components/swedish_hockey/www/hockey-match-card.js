@@ -3025,6 +3025,7 @@ var cardStyles = i`
         color: var(--secondary-text-color);
       }
       .pv-h2h { padding: 4px 0 2px; }
+      .pv-history-toggle { margin-top: 10px; flex: none; }
       /* The table, club against club: the better figure lit, a label between. */
       .pv-vs { display: flex; flex-direction: column; flex: none; }
       .pv-vs-row {
@@ -5817,6 +5818,10 @@ var HockeyPreviewView = class extends PartElement {
     `;
   }
   // ---- Meetings ------------------------------------------------------------------
+  // This season's meetings are on show; earlier seasons' wait behind a
+  // button, read in the background so it can say how many there are and open
+  // at once. What is counted up above them is what is on show, so the count
+  // never takes in games the reader cannot see.
   meetings(data) {
     const { ctx } = this;
     const { ctl } = ctx;
@@ -5824,11 +5829,49 @@ var HockeyPreviewView = class extends PartElement {
     const preview = ctl.preview ?? {};
     const history = preview.history ?? {};
     const archive = history.meetings ?? [];
+    const open = Boolean(preview.historyOpen);
     const thisSeason = (data.meetings ?? []).filter((m2) => !m2.this_game);
-    const earlier = earlierMeetings(data.meetings ?? [], archive, game.start);
-    const summary = headToHead(earlier, game.home_code);
+    const counted = earlierMeetings(data.meetings ?? [], open ? archive : [], game.start);
+    const summary = headToHead(counted, game.home_code);
     const ours = ctl.teamRef();
     const through = [game.home_code, game.away_code].find((code) => clubKey(code) === clubKey(ours));
+    const searched = this.searched(history.seasons);
+    return b2`
+      <div class="team-section">Inbördes möten</div>
+      ${summary.games ? this.summary(summary, game) : A}
+      ${thisSeason.length ? b2`<div class="pv-subhead">Den här säsongen</div>
+            ${thisSeason.map((meeting) => fixtureRow(ctx, meeting, through))}` : A}
+      ${this.historyToggle(history, archive, open, searched)}
+      ${open ? this.history(history, archive, through, searched) : A}
+    `;
+  }
+  historyToggle(history, archive, open, searched) {
+    const { ctl } = this.ctx;
+    if (!history.loading && !history.error && !archive.length) {
+      return b2`<div class="pv-source">
+        Inga möten ${searched ? `i ${searched}` : "tidigare s\xE4songer"}.
+      </div>`;
+    }
+    const count = archive.length ? ` (${archive.length} ${archive.length === 1 ? "m\xF6te" : "m\xF6ten"})` : "";
+    return b2`
+      <button
+        class="stats-more pv-history-toggle"
+        aria-expanded=${open ? "true" : "false"}
+        @click=${() => ctl.setPreview({ historyOpen: !open })}
+      >
+        ${open ? "D\xF6lj tidigare s\xE4songer" : `Visa tidigare s\xE4songer${count}`}
+        <ha-icon icon=${open ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
+      </button>
+    `;
+  }
+  history(history, archive, through, searched) {
+    const { ctx } = this;
+    const { ctl } = ctx;
+    const preview = ctl.preview ?? {};
+    if (history.loading) return loading("H\xE4mtar tidigare m\xF6ten\u2026", "games");
+    if (history.error) {
+      return b2`<div class="recap-note">Tidigare säsonger gick inte att läsa: ${history.error}</div>`;
+    }
     const groups = /* @__PURE__ */ new Map();
     for (const meeting of archive) {
       const series = meeting.series && meeting.series !== meeting.league ? meeting.series : meeting.league;
@@ -5836,31 +5879,23 @@ var HockeyPreviewView = class extends PartElement {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(meeting);
     }
-    const limit = preview.historyMore ? Infinity : HISTORY_SHOWN;
-    let left = limit;
-    const archiveRows = [];
+    let left = preview.historyMore ? Infinity : HISTORY_SHOWN;
+    const rows2 = [];
     for (const [label, games] of groups) {
       if (left <= 0) break;
-      archiveRows.push(b2`<div class="pv-subhead">${label}</div>`);
+      rows2.push(b2`<div class="pv-subhead">${label}</div>`);
       for (const meeting of games.slice(0, left)) {
-        archiveRows.push(fixtureRow(ctx, meeting, through, { still: true }));
+        rows2.push(fixtureRow(ctx, meeting, through, { still: true }));
       }
       left -= games.length;
     }
-    const searched = this.searched(history.seasons);
     return b2`
-      <div class="team-section">Inbördes möten</div>
-      ${summary.games ? this.summary(summary, game) : A}
-      ${thisSeason.length ? b2`<div class="pv-subhead">Den här säsongen</div>
-            ${thisSeason.map((meeting) => fixtureRow(ctx, meeting, through))}` : A}
-      ${history.loading ? loading("H\xE4mtar tidigare m\xF6ten\u2026", "games") : history.error ? b2`<div class="recap-note">Tidigare säsonger gick inte att läsa: ${history.error}</div>` : archive.length ? b2`${archiveRows}
-              ${archive.length > HISTORY_SHOWN && !preview.historyMore ? b2`<button class="stats-more" @click=${() => ctl.setPreview({ historyMore: true })}>
-                    Visa fler (${archive.length - HISTORY_SHOWN} till)
-                    <ha-icon icon="mdi:chevron-down"></ha-icon>
-                  </button>` : A}` : b2`<div class="recap-note">
-                Inga möten ${searched ? `i ${searched}` : "tidigare s\xE4songer"}.
-              </div>`}
-      ${archive.length && searched ? b2`<div class="pv-source">Tidigare säsonger: ${searched}, ur förbundets arkiv</div>` : A}
+      ${rows2}
+      ${archive.length > HISTORY_SHOWN && !preview.historyMore ? b2`<button class="stats-more" @click=${() => ctl.setPreview({ historyMore: true })}>
+            Visa fler (${archive.length - HISTORY_SHOWN} till)
+            <ha-icon icon="mdi:chevron-down"></ha-icon>
+          </button>` : A}
+      ${searched ? b2`<div class="pv-source">Tidigare säsonger: ${searched}, ur förbundets arkiv</div>` : A}
     `;
   }
   /** "SHL och Hockeyallsvenskan sedan 2021/22", from the seasons searched. */

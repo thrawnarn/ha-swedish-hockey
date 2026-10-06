@@ -2317,6 +2317,7 @@ export const cardStyles = css`
         color: var(--secondary-text-color);
       }
       .pv-h2h { padding: 4px 0 2px; }
+      .pv-history-toggle { margin-top: 10px; flex: none; }
       /* The table, club against club: the better figure lit, a label between. */
       .pv-vs { display: flex; flex-direction: column; flex: none; }
       .pv-vs-row {

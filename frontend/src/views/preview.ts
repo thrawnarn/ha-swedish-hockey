@@ -233,6 +233,10 @@ export class HockeyPreviewView extends PartElement {
 
   // ---- Meetings ------------------------------------------------------------------
 
+  // This season's meetings are on show; earlier seasons' wait behind a
+  // button, read in the background so it can say how many there are and open
+  // at once. What is counted up above them is what is on show, so the count
+  // never takes in games the reader cannot see.
   private meetings(data: Row) {
     const { ctx } = this;
     const { ctl } = ctx;
@@ -240,30 +244,12 @@ export class HockeyPreviewView extends PartElement {
     const preview = ctl.preview ?? {};
     const history: Row = preview.history ?? {};
     const archive: Row[] = history.meetings ?? [];
+    const open = Boolean(preview.historyOpen);
     const thisSeason: Row[] = (data.meetings ?? []).filter((m: Row) => !m.this_game);
-    const earlier = earlierMeetings(data.meetings ?? [], archive, game.start);
-    const summary = headToHead(earlier, game.home_code);
+    const counted = earlierMeetings(data.meetings ?? [], open ? archive : [], game.start);
+    const summary = headToHead(counted, game.home_code);
     const ours = ctl.teamRef();
     const through = [game.home_code, game.away_code].find((code) => clubKey(code) === clubKey(ours));
-
-    const groups = new Map<string, Row[]>();
-    for (const meeting of archive) {
-      const series = meeting.series && meeting.series !== meeting.league ? meeting.series : meeting.league;
-      const key = `${seasonLabel(meeting.season)} · ${series === "HockeyAllsvenskan" ? "Hockeyallsvenskan" : series}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(meeting);
-    }
-    const limit = preview.historyMore ? Infinity : HISTORY_SHOWN;
-    let left = limit;
-    const archiveRows: TemplateResult[] = [];
-    for (const [label, games] of groups) {
-      if (left <= 0) break;
-      archiveRows.push(html`<div class="pv-subhead">${label}</div>`);
-      for (const meeting of games.slice(0, left)) {
-        archiveRows.push(fixtureRow(ctx, meeting, through, { still: true }));
-      }
-      left -= games.length;
-    }
     const searched = this.searched(history.seasons);
 
     return html`
@@ -273,22 +259,68 @@ export class HockeyPreviewView extends PartElement {
         ? html`<div class="pv-subhead">Den här säsongen</div>
             ${thisSeason.map((meeting) => fixtureRow(ctx, meeting, through))}`
         : nothing}
-      ${history.loading
-        ? loading("Hämtar tidigare möten…", "games")
-        : history.error
-          ? html`<div class="recap-note">Tidigare säsonger gick inte att läsa: ${history.error}</div>`
-          : archive.length
-            ? html`${archiveRows}
-              ${archive.length > HISTORY_SHOWN && !preview.historyMore
-                ? html`<button class="stats-more" @click=${() => ctl.setPreview({ historyMore: true })}>
-                    Visa fler (${archive.length - HISTORY_SHOWN} till)
-                    <ha-icon icon="mdi:chevron-down"></ha-icon>
-                  </button>`
-                : nothing}`
-            : html`<div class="recap-note">
-                Inga möten ${searched ? `i ${searched}` : "tidigare säsonger"}.
-              </div>`}
-      ${archive.length && searched ? html`<div class="pv-source">Tidigare säsonger: ${searched}, ur förbundets arkiv</div>` : nothing}
+      ${this.historyToggle(history, archive, open, searched)}
+      ${open ? this.history(history, archive, through, searched) : nothing}
+    `;
+  }
+
+  private historyToggle(history: Row, archive: Row[], open: boolean, searched: string | null) {
+    const { ctl } = this.ctx;
+    // Read and empty: there is nothing to open, and saying so is enough.
+    if (!history.loading && !history.error && !archive.length) {
+      return html`<div class="pv-source">
+        Inga möten ${searched ? `i ${searched}` : "tidigare säsonger"}.
+      </div>`;
+    }
+    const count = archive.length
+      ? ` (${archive.length} ${archive.length === 1 ? "möte" : "möten"})`
+      : "";
+    return html`
+      <button
+        class="stats-more pv-history-toggle"
+        aria-expanded=${open ? "true" : "false"}
+        @click=${() => ctl.setPreview({ historyOpen: !open })}
+      >
+        ${open ? "Dölj tidigare säsonger" : `Visa tidigare säsonger${count}`}
+        <ha-icon icon=${open ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
+      </button>
+    `;
+  }
+
+  private history(history: Row, archive: Row[], through: string | undefined, searched: string | null) {
+    const { ctx } = this;
+    const { ctl } = ctx;
+    const preview = ctl.preview ?? {};
+    if (history.loading) return loading("Hämtar tidigare möten…", "games");
+    if (history.error) {
+      return html`<div class="recap-note">Tidigare säsonger gick inte att läsa: ${history.error}</div>`;
+    }
+    const groups = new Map<string, Row[]>();
+    for (const meeting of archive) {
+      const series = meeting.series && meeting.series !== meeting.league ? meeting.series : meeting.league;
+      const key = `${seasonLabel(meeting.season)} · ${series === "HockeyAllsvenskan" ? "Hockeyallsvenskan" : series}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(meeting);
+    }
+    let left = preview.historyMore ? Infinity : HISTORY_SHOWN;
+    const rows: TemplateResult[] = [];
+    for (const [label, games] of groups) {
+      if (left <= 0) break;
+      rows.push(html`<div class="pv-subhead">${label}</div>`);
+      for (const meeting of games.slice(0, left)) {
+        rows.push(fixtureRow(ctx, meeting, through, { still: true }));
+      }
+      left -= games.length;
+    }
+    return html`
+      ${rows}
+      ${archive.length > HISTORY_SHOWN && !preview.historyMore
+        ? html`<button class="stats-more" @click=${() => ctl.setPreview({ historyMore: true })}>
+            Visa fler (${archive.length - HISTORY_SHOWN} till)
+            <ha-icon icon="mdi:chevron-down"></ha-icon>
+          </button>`
+        : nothing}
+      ${searched ? html`<div class="pv-source">Tidigare säsonger: ${searched}, ur förbundets arkiv</div>` : nothing}
     `;
   }
 

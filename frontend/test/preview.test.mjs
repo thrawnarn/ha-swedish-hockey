@@ -68,21 +68,40 @@ test("each club's form, its run, the game's venue form and its rest", async () =
   unmount(card);
 });
 
-test("earlier meetings come from the archive, grouped by season, and are counted with this season's", async () => {
+test("earlier seasons wait behind a button that says how many meetings there are", async () => {
   const card = await fromSchedule();
   await tap(card, ".fixture-row.tappable[title='Inför matchen']");
   const view = $(card, "hockey-preview-view");
+  // Hidden at first: no rows from the archive, and nothing counted from it.
+  assert.equal(view.querySelectorAll(".fixture-row:not(.tappable)").length, 0);
+  assert.ok(!$$(card, "hockey-preview-view .pv-subhead").map(text).some((h) => h.startsWith("2025/26")));
+  const toggle = $(card, ".pv-history-toggle");
+  assert.equal(text(toggle), "Visa tidigare säsonger (9 möten)");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  const before = text($(card, ".pv-h2h .stat-label") ?? { textContent: "" });
+  assert.ok(!before.includes("9"), "the count above takes in only this season");
+  unmount(card);
+});
+
+test("opened, the earlier seasons are grouped by season, counted in, and close again", async () => {
+  const card = await fromSchedule();
+  await tap(card, ".fixture-row.tappable[title='Inför matchen']");
+  await tap(card, ".pv-history-toggle");
+  const view = $(card, "hockey-preview-view");
+  assert.equal(text($(card, ".pv-history-toggle")), "Dölj tidigare säsonger");
+  assert.equal($(card, ".pv-history-toggle").getAttribute("aria-expanded"), "true");
   const heads = $$(card, "hockey-preview-view .pv-subhead").map(text);
   assert.ok(heads.includes("2025/26 · SM-slutspel SHL"), heads.join("|"));
   assert.ok(heads.includes("2025/26 · SHL"));
   // Six shown, the rest behind a button.
-  const still = [...view.querySelectorAll(".fixture-row:not(.tappable)")];
-  assert.equal(still.length, 6);
-  await tap(card, "hockey-preview-view .stats-more");
+  assert.equal(view.querySelectorAll(".fixture-row:not(.tappable)").length, 6);
+  await tap(card, "hockey-preview-view .stats-more:not(.pv-history-toggle)");
   assert.equal(view.querySelectorAll(".fixture-row:not(.tappable)").length, 9);
   assert.ok(text($(card, ".pv-h2h .stat-label")).includes("senaste mötena"));
   assert.match(text(view), /avgjordes i förlängning eller straffar/);
   assert.match(text(view), /SHL och Hockeyallsvenskan sedan 2024\/25/);
+  await tap(card, ".pv-history-toggle");
+  assert.equal(view.querySelectorAll(".fixture-row:not(.tappable)").length, 0, "closed again");
   unmount(card);
 });
 
@@ -91,22 +110,29 @@ test("the archive is slower: the rest of the preview does not wait for it", asyn
   const card = await fromSchedule(hassWith({ answers: { get_head_to_head: () => slow.promise } }));
   await tap(card, ".fixture-row.tappable[title='Inför matchen']");
   assert.ok($(card, ".pv-vs"), "the table is drawn");
+  assert.equal($(card, "hockey-preview-view hockey-loading"), null, "nothing loads where nothing is shown");
+  assert.equal(text($(card, ".pv-history-toggle")), "Visa tidigare säsonger");
+  await tap(card, ".pv-history-toggle");
   const loader = $(card, "hockey-preview-view hockey-loading");
   assert.equal(text(loader.querySelector(".loading-label")), "Hämtar tidigare möten…");
   slow.resolve({ meetings: [], seasons: ["2025-26 SHL"] });
   await settle(card);
   assert.equal($(card, "hockey-preview-view hockey-loading"), null);
+  // Nothing to open: the button gives way to a line saying so.
+  assert.equal($(card, ".pv-history-toggle"), null);
   assert.match(text($(card, "hockey-preview-view")), /Inga möten i SHL sedan 2025\/26/);
   unmount(card);
 });
 
-test("an archive that cannot be read says so, and the rest stands", async () => {
+test("an archive that cannot be read says so when opened, and the rest stands", async () => {
   const card = await fromSchedule(
     hassWith({ answers: { get_head_to_head: () => Promise.reject(new Error("borta")) } }),
   );
   await tap(card, ".fixture-row.tappable[title='Inför matchen']");
-  assert.match(text($(card, "hockey-preview-view")), /Tidigare säsonger gick inte att läsa: borta/);
   assert.ok($(card, ".pv-teams"));
+  assert.doesNotMatch(text($(card, "hockey-preview-view")), /gick inte att läsa/);
+  await tap(card, ".pv-history-toggle");
+  assert.match(text($(card, "hockey-preview-view")), /Tidigare säsonger gick inte att läsa: borta/);
   unmount(card);
 });
 
