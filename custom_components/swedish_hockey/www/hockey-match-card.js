@@ -593,6 +593,7 @@ var DEFAULTS = {
 var PLATFORM = "swedish_hockey";
 var TABLE_CUTS = [6, 10, 12];
 var SCHEDULE_BEFORE = 100;
+var SCHEDULE_LIMIT = 500;
 var ROSTER_SORT = { key: "TP", dir: "desc" };
 var DECIDED_IN = {
   OT: "Efter f\xF6rl\xE4ngning",
@@ -1425,6 +1426,79 @@ var cardStyles = i`
         font-size: 0.82em;
         color: var(--secondary-text-color);
       }
+      .player-clubs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 10px;
+        padding-bottom: 8px;
+        font-size: 0.82em;
+        color: var(--secondary-text-color);
+      }
+      .player-club {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--primary-text-color);
+      }
+      .player-club img {
+        width: 16px;
+        height: 16px;
+        object-fit: contain;
+      }
+      .career-row {
+        display: grid;
+        grid-template-columns: 3.2em minmax(0, 1fr) repeat(4, 2.3em);
+        gap: 6px;
+        align-items: center;
+        padding: 5px 0;
+        font-size: 0.88em;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      .career.goalie .career-row {
+        grid-template-columns: 3.2em minmax(0, 1fr) 2.3em 3.2em 2.8em;
+      }
+      .career-row.new-season { border-top: 1px solid var(--divider-color); }
+      .career-row.head {
+        color: var(--secondary-text-color);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .career-row.head > span { font-size: 0.84em; }
+      .career-season {
+        text-align: left;
+        color: var(--secondary-text-color);
+      }
+      .career-club {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        text-align: left;
+      }
+      .career-logo {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+      }
+      .career-names {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .career-team,
+      .career-comp {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .career-comp {
+        font-size: 0.82em;
+        color: var(--secondary-text-color);
+      }
+      .career-points { font-weight: 700; }
       .player-jersey {
         flex: none;
         display: grid;
@@ -1610,6 +1684,23 @@ var cardStyles = i`
         font-variant-numeric: tabular-nums;
         color: var(--primary-text-color);
         white-space: nowrap;
+      }
+      /* A finished game in a day's list: the word, and an outline where the
+         games still to come or being played are filled in. */
+      .fixture-final {
+        align-self: flex-start;
+        padding: 1px 6px;
+        border-radius: 6px;
+        background: var(--divider-color, rgba(127, 127, 127, 0.2));
+        color: var(--secondary-text-color);
+        font-size: 0.78em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .fixture-row.ended {
+        background: none;
+        box-shadow: inset 0 0 0 1px var(--divider-color, rgba(127, 127, 127, 0.25));
       }
       .fixture-live {
         display: inline-flex;
@@ -3873,7 +3964,7 @@ var HockeyController = class {
     const token = this.newRequest();
     this.schedule = { loading: true, before, teams: this.schedule?.teams ?? [] };
     try {
-      const data = await this.ask("get_schedule", { limit: 200, before, highlights: true });
+      const data = await this.ask("get_schedule", { limit: SCHEDULE_LIMIT, before, highlights: true });
       if (this.stale(token)) return;
       this.schedule = {
         games: data?.games ?? [],
@@ -4179,16 +4270,26 @@ var HockeyController = class {
     if (!row?.game_id && !row?.latest) return;
     const token = this.newRequest();
     this.recap = { loading: true, row };
+    const ask = (details) => this.ask("get_recap", {
+      team: teamCode || this.teamRef(),
+      ...row.game_id ? { game_id: row.game_id } : {},
+      ...details ? {} : { details: false }
+    });
+    let full = false;
+    const quick = ask(false).then((data) => {
+      if (!this.stale(token) && !full) this.recap = { row, data, more: true };
+      return data;
+    }).catch(() => null);
     try {
-      const data = await this.ask("get_recap", {
-        team: teamCode || this.teamRef(),
-        ...row.game_id ? { game_id: row.game_id } : {}
-      });
+      const data = await ask(true);
+      full = true;
       if (this.stale(token)) return;
       this.recap = { row, data };
     } catch (err) {
+      full = true;
+      const data = await quick;
       if (this.stale(token)) return;
-      this.recap = { row, error: errorText(err) };
+      this.recap = data ? { row, data } : { row, error: errorText(err) };
     }
   }
   closeRecap() {
@@ -5542,8 +5643,71 @@ var HockeyPlayerView = class extends PartElement {
             </div>` : A}
       </div>
       ${profile?.youth_team ? b2`<div class="player-youth">Moderklubb: ${profile.youth_team}</div>` : A}
+      ${this.earlierClubs(data?.career, teamCode, player.team)}
       <div class="team-stats player-stats">${tiles.map(([label, value]) => stat(label, value))}</div>
       ${config.show_stats !== false ? this.league(player.name ?? name, teamCode, goalie) : A}
+      ${this.career(data?.career, goalie)}
+    `;
+  }
+  // The clubs he has played for before this one, the latest first. A club is
+  // his present one under any of its codes or its name: the career's code is
+  // the stats system's, which is not always the schedule's.
+  earlierClubs(career, teamCode, teamName) {
+    const present = new Set([clubKey(teamCode), clubKey(teamName)].filter(Boolean));
+    const seen = /* @__PURE__ */ new Set();
+    const clubs = [];
+    for (const row of career ?? []) {
+      const keys = [row.team_code, row.stat_net_team, row.team].map(clubKey);
+      if (keys.some((key2) => present.has(key2))) continue;
+      const key = clubKey(row.team);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      clubs.push(row);
+    }
+    if (!clubs.length) return A;
+    return b2`<div class="player-clubs">
+      <span class="player-clubs-label">Tidigare klubbar:</span>
+      ${clubs.map(
+      (club) => b2`<span class="player-club"
+          >${club.logo ? b2`<img src=${club.logo} alt="" loading="lazy" />` : A}${club.team}</span
+        >`
+    )}
+    </div>`;
+  }
+  // Season by season, as far back as the league's records go: the Swedish
+  // leagues only, so a season abroad or in junior hockey is simply missing.
+  career(career, goalie) {
+    if (!career?.length) return A;
+    const columns = goalie ? [["GP", "M"], ["SVS_perc", "R\xE4dd%"], ["GAA", "GAA"]] : [["GP", "M"], ["G", "M\xE5l"], ["A", "Ass"], ["TP", "P"]];
+    const cell = (row, key) => {
+      const value = row[key];
+      if (value === null || value === void 0 || value === "") return "\u2013";
+      return key === "SVS_perc" ? Number(value).toFixed(1) : value;
+    };
+    let previous = null;
+    return b2`
+      <div class="team-section">Karriär</div>
+      <div class="career ${goalie ? "goalie" : ""}">
+        <div class="career-row head">
+          <span>Säsong</span><span class="career-club">Klubb</span>
+          ${columns.map(([, label]) => b2`<span>${label}</span>`)}
+        </div>
+        ${career.map((row) => {
+      const first = row.season !== previous;
+      previous = row.season;
+      return b2`<div class="career-row ${first ? "new-season" : ""}">
+            <span class="career-season">${first ? seasonLabel(row.season) : ""}</span>
+            <span class="career-club">
+              ${row.logo ? b2`<img class="career-logo" src=${row.logo} alt="" loading="lazy" />` : b2`<span class="career-logo"></span>`}
+              <span class="career-names">
+                <span class="career-team">${row.team}</span>
+                ${row.competition ? b2`<span class="career-comp">${row.competition}</span>` : A}
+              </span>
+            </span>
+            ${columns.map(([key]) => b2`<span class=${key === "TP" ? "career-points" : ""}>${cell(row, key)}</span>`)}
+          </div>`;
+    })}
+      </div>
     `;
   }
   // The player's row in the league's statistics, once they have been read:
@@ -5580,6 +5744,10 @@ var HockeyPlayerView = class extends PartElement {
     `;
   }
 };
+function seasonLabel(season) {
+  const two = (year) => String(year % 100).padStart(2, "0");
+  return `${two(season)}/${two(season + 1)}`;
+}
 
 // src/matchup.ts
 function headToHead(meetings, teamCode) {
@@ -5647,7 +5815,7 @@ var RESULT_LETTER = {
   loss: "F",
   draw: "O"
 };
-function seasonLabel(season) {
+function seasonLabel2(season) {
   return String(season ?? "").replace("-", "/");
 }
 
@@ -5662,10 +5830,18 @@ function outcomeFor(game, teamCode, played) {
   return mine === theirs ? null : mine > theirs;
 }
 function fixtureRow(ctx, game, teamCode, options = {}) {
-  const { isNext = false, hideDate = false, markSelf = false, live = false, still = false } = options;
+  const {
+    isNext = false,
+    hideDate = false,
+    markSelf = false,
+    live = false,
+    ended = false,
+    still = false
+  } = options;
   const { locale, hass, ctl } = ctx;
   const when = new Date(game.start ?? "");
   const played = game.home_score !== null && game.home_score !== void 0;
+  const over = ended && played && !game.in_progress && game.state === "post-game";
   const extra = game.decided_in && game.decided_in !== "FT" ? game.decided_in : "";
   const won = game.won ?? outcomeFor(game, teamCode, played);
   const through = teamCode || game.home_code;
@@ -5676,6 +5852,10 @@ function fixtureRow(ctx, game, teamCode, options = {}) {
   const lead = !played || home === away ? null : home > away ? "home" : "away";
   const outcome = won === true ? "won" : won === false ? "lost" : "";
   const meta = [];
+  const round = String(game.round ?? "").trim();
+  if (round) {
+    meta.push(b2`<span class="fixture-round">${/^\d+$/.test(round) ? `Omg\xE5ng ${round}` : round}</span>`);
+  }
   if (game.venue) meta.push(b2`<span>${game.venue}</span>`);
   if ((!played || live) && game.tv_channels?.length && ctx.config.show_tv !== false) {
     meta.push(b2`<span class="fixture-tv">
@@ -5687,7 +5867,7 @@ function fixtureRow(ctx, game, teamCode, options = {}) {
   const open = played ? () => ctl.loadRecap(game, through) : () => ctl.openPreview(game);
   return b2`
     <div
-      class="fixture-row ${isNext ? "next" : ""} ${tappable ? "tappable" : ""} ${self ? "self" : ""}"
+      class="fixture-row ${isNext ? "next" : ""} ${tappable ? "tappable" : ""} ${self ? "self" : ""} ${over ? "ended" : ""}"
       role=${tappable ? "button" : A}
       tabindex=${tappable ? "0" : A}
       title=${tappable && !played ? "Inf\xF6r matchen" : A}
@@ -5695,7 +5875,9 @@ function fixtureRow(ctx, game, teamCode, options = {}) {
       @keydown=${tappable ? onActivate(open) : A}
     >
       <span class="fixture-when">
-        ${live && game.in_progress ? b2`<span class="fixture-live"><span class="playing"></span>P${game.period ?? ""}</span>` : Number.isNaN(when.getTime()) ? "" : hideDate ? when.toLocaleTimeString(locale, timeFormat(hass)) : b2`${when.toLocaleDateString(locale, SHORT_DATE)}<span class="fixture-clock"
+        ${live && game.in_progress ? b2`<span class="fixture-live"><span class="playing"></span>P${game.period ?? ""}</span>` : over ? b2`<span class="fixture-final">Slut</span>${Number.isNaN(when.getTime()) ? A : b2`<span class="fixture-clock"
+                      >${when.toLocaleTimeString(locale, timeFormat(hass))}</span
+                    >`}` : Number.isNaN(when.getTime()) ? "" : hideDate ? when.toLocaleTimeString(locale, timeFormat(hass)) : b2`${when.toLocaleDateString(locale, SHORT_DATE)}<span class="fixture-clock"
                     >${when.toLocaleTimeString(locale, timeFormat(hass))}</span
                   >`}
       </span>
@@ -5940,7 +6122,7 @@ var HockeyPreviewView = class extends PartElement {
     const groups = /* @__PURE__ */ new Map();
     for (const meeting of archive) {
       const series = meeting.series && meeting.series !== meeting.league ? meeting.series : meeting.league;
-      const key = `${seasonLabel(meeting.season)} \xB7 ${series === "HockeyAllsvenskan" ? "Hockeyallsvenskan" : series}`;
+      const key = `${seasonLabel2(meeting.season)} \xB7 ${series === "HockeyAllsvenskan" ? "Hockeyallsvenskan" : series}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(meeting);
     }
@@ -7169,7 +7351,12 @@ var HockeyTodayView = class extends PartElement {
     else {
       body = b2`
         ${games.map(
-        (game) => fixtureRow(ctx, game, null, { hideDate: true, markSelf: true, live: offset === 0 })
+        (game) => fixtureRow(ctx, game, null, {
+          hideDate: true,
+          markSelf: true,
+          live: offset === 0,
+          ended: true
+        })
       )}
         ${updated && offset === 0 ? b2`<div class="live-updated">
               Uppdaterad ${updated.toLocaleTimeString(locale, timeFormat(hass))}

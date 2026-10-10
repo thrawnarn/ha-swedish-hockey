@@ -82,4 +82,47 @@ check(
     not api._is_club("VIS", TEAMS["VHC"]),
 )
 
+
+# --- career -----------------------------------------------------------------
+CAREER_PAGE = (
+    '5:["$","div",null,{"playerData":{},"careerStats":{"player_info":{},'
+    '"player_season_by_season_stats":['
+    '{"Season":2025,"GameType":"Elitserien","TeamCode":"NOR","GP":50,"G":9,"A":11,"TP":20,"PIM":4,"PlusMinus":-3},'
+    '{"Season":2026,"GameType":"HA","TeamCode":"SYD","GP":8,"G":2,"A":0,"TP":2,"PIM":5,"PlusMinus":2},'
+    '{"Season":2024,"GameType":"Elitserien","TeamCode":"FBK","GP":40,"G":1,"A":2,"TP":3,"PIM":0,"PlusMinus":0}'
+    ']},"heading":null}]\n'
+)
+rows = api._career_rows(CAREER_PAGE)
+check("the career's rows come out of the flight payload", [r["Season"] for r in rows] == [2025, 2026, 2024])
+try:
+    api._career_rows("<html>no career here</html>")
+    check("a page without a career says so", False)
+except api.HockeyApiError:
+    check("a page without a career says so", True)
+
+NAMES = {
+    2026: {"SYD": {"name": "Sydby IK", "shortName": "SYD", "logo": "syd.webp"}},
+    2019: {"NOR": {"name": "Norrby HC", "shortName": "NHC", "logo": "nor.webp"}},
+}
+syd, nor, fbk = (api._career_row(r, NAMES) for r in sorted(rows, key=lambda r: -r["Season"]))
+check("a club is named from its own season", syd["team"] == "Sydby IK" and syd["logo"] == "syd.webp")
+check(
+    "a club the catalogue lacks that season takes another season's name and code",
+    nor["team"] == "Norrby HC" and nor["team_code"] == "NHC",
+)
+check("an SHL club that never played here is named by hand", fbk["team"] == "Färjestad" and fbk["logo"] is None)
+check("the competition is in Swedish", nor["competition"] == "SHL" and syd["competition"] == "Hockeyallsvenskan")
+check("a skater keeps his points", syd["role"] == "skater" and (syd["GP"], syd["TP"]) == (8, 2))
+check(
+    "an unknown code is shown as it came",
+    api._career_row({"Season": 2010, "GameType": "Okänd", "TeamCode": "ZZZ"}, NAMES)["team"] == "ZZZ",
+)
+keeper = api._career_row(
+    {"Season": 2026, "GameType": "HA", "TeamCode": "SYD", "GP": 8, "GPI": 4, "W": 4, "L": 0,
+     "SOGA": 108, "SVS": 100, "SVS_perc": None, "GAA": "2.01", "SO": 0},
+    NAMES,
+)
+check("a goalkeeper's games are the ones he played", keeper["role"] == "goalkeeper" and keeper["GP"] == 4)
+check("a goalkeeper's save percentage is worked out from his saves", keeper["SVS_perc"] == 92.59)
+
 done()

@@ -15,6 +15,9 @@ export interface FixtureOptions {
   hideDate?: boolean;
   markSelf?: boolean;
   live?: boolean;
+  /** Say in so many words that a game is over: in a day's list, a finished
+   *  game and one still to come otherwise differ only by the score. */
+  ended?: boolean;
   /** A row that opens nothing: a game from the archive has no summary to
    *  read back. */
   still?: boolean;
@@ -40,10 +43,18 @@ export function fixtureRow(
   teamCode: string | null | undefined,
   options: FixtureOptions = {},
 ) {
-  const { isNext = false, hideDate = false, markSelf = false, live = false, still = false } = options;
+  const {
+    isNext = false,
+    hideDate = false,
+    markSelf = false,
+    live = false,
+    ended = false,
+    still = false,
+  } = options;
   const { locale, hass, ctl } = ctx;
   const when = new Date(game.start ?? "");
   const played = game.home_score !== null && game.home_score !== undefined;
+  const over = ended && played && !game.in_progress && game.state === "post-game";
   const extra = game.decided_in && game.decided_in !== "FT" ? game.decided_in : "";
   // In a league-wide list there is no club to see the game through, and no
   // colour for how it went.
@@ -60,9 +71,14 @@ export function fixtureRow(
   const away = Number(game.away_score);
   const lead = !played || home === away ? null : home > away ? "home" : "away";
   const outcome = won === true ? "won" : won === false ? "lost" : "";
-  // Under the sides: where it is played, and on which channel while it is
-  // still to come.
+  // Under the sides: the round, where it is played, and on which channel while
+  // it is still to come. The leagues number their rounds; anything else (a
+  // playoff label) is shown as it came.
   const meta: TemplateResult[] = [];
+  const round = String(game.round ?? "").trim();
+  if (round) {
+    meta.push(html`<span class="fixture-round">${/^\d+$/.test(round) ? `Omgång ${round}` : round}</span>`);
+  }
   if (game.venue) meta.push(html`<span>${game.venue}</span>`);
   if ((!played || live) && game.tv_channels?.length && ctx.config.show_tv !== false) {
     meta.push(html`<span class="fixture-tv">
@@ -75,7 +91,7 @@ export function fixtureRow(
   const open = played ? () => ctl.loadRecap(game, through) : () => ctl.openPreview(game);
   return html`
     <div
-      class="fixture-row ${isNext ? "next" : ""} ${tappable ? "tappable" : ""} ${self ? "self" : ""}"
+      class="fixture-row ${isNext ? "next" : ""} ${tappable ? "tappable" : ""} ${self ? "self" : ""} ${over ? "ended" : ""}"
       role=${tappable ? "button" : nothing}
       tabindex=${tappable ? "0" : nothing}
       title=${tappable && !played ? "Inför matchen" : nothing}
@@ -85,6 +101,12 @@ export function fixtureRow(
       <span class="fixture-when">
         ${live && game.in_progress
           ? html`<span class="fixture-live"><span class="playing"></span>P${game.period ?? ""}</span>`
+          : over
+            ? html`<span class="fixture-final">Slut</span>${Number.isNaN(when.getTime())
+                  ? nothing
+                  : html`<span class="fixture-clock"
+                      >${when.toLocaleTimeString(locale, timeFormat(hass))}</span
+                    >`}`
           : Number.isNaN(when.getTime())
             ? ""
             : hideDate

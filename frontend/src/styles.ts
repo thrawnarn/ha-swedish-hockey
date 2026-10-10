@@ -707,6 +707,79 @@ export const cardStyles = css`
         font-size: 0.82em;
         color: var(--secondary-text-color);
       }
+      .player-clubs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 10px;
+        padding-bottom: 8px;
+        font-size: 0.82em;
+        color: var(--secondary-text-color);
+      }
+      .player-club {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--primary-text-color);
+      }
+      .player-club img {
+        width: 16px;
+        height: 16px;
+        object-fit: contain;
+      }
+      .career-row {
+        display: grid;
+        grid-template-columns: 3.2em minmax(0, 1fr) repeat(4, 2.3em);
+        gap: 6px;
+        align-items: center;
+        padding: 5px 0;
+        font-size: 0.88em;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      .career.goalie .career-row {
+        grid-template-columns: 3.2em minmax(0, 1fr) 2.3em 3.2em 2.8em;
+      }
+      .career-row.new-season { border-top: 1px solid var(--divider-color); }
+      .career-row.head {
+        color: var(--secondary-text-color);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .career-row.head > span { font-size: 0.84em; }
+      .career-season {
+        text-align: left;
+        color: var(--secondary-text-color);
+      }
+      .career-club {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        text-align: left;
+      }
+      .career-logo {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+      }
+      .career-names {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .career-team,
+      .career-comp {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .career-comp {
+        font-size: 0.82em;
+        color: var(--secondary-text-color);
+      }
+      .career-points { font-weight: 700; }
       .player-jersey {
         flex: none;
         display: grid;
@@ -892,6 +965,23 @@ export const cardStyles = css`
         font-variant-numeric: tabular-nums;
         color: var(--primary-text-color);
         white-space: nowrap;
+      }
+      /* A finished game in a day's list: the word, and an outline where the
+         games still to come or being played are filled in. */
+      .fixture-final {
+        align-self: flex-start;
+        padding: 1px 6px;
+        border-radius: 6px;
+        background: var(--divider-color, rgba(127, 127, 127, 0.2));
+        color: var(--secondary-text-color);
+        font-size: 0.78em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .fixture-row.ended {
+        background: none;
+        box-shadow: inset 0 0 0 1px var(--divider-color, rgba(127, 127, 127, 0.25));
       }
       .fixture-live {
         display: inline-flex;

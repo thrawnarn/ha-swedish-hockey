@@ -8,6 +8,7 @@ import { onActivate, PartElement } from "../base";
 import { formatStat, ordinal, plus } from "../format";
 import { rankStats, STATS_KINDS } from "../stats-model";
 import type { Row } from "../types";
+import { clubKey } from "../teams";
 import { badge, stat } from "../parts/common";
 import { loading } from "../parts/loading";
 
@@ -116,8 +117,78 @@ export class HockeyPlayerView extends PartElement {
       ${profile?.youth_team
         ? html`<div class="player-youth">Moderklubb: ${profile.youth_team}</div>`
         : nothing}
+      ${this.earlierClubs(data?.career, teamCode, player.team)}
       <div class="team-stats player-stats">${tiles.map(([label, value]) => stat(label, value))}</div>
       ${config.show_stats !== false ? this.league(player.name ?? name, teamCode, goalie) : nothing}
+      ${this.career(data?.career, goalie)}
+    `;
+  }
+
+  // The clubs he has played for before this one, the latest first. A club is
+  // his present one under any of its codes or its name: the career's code is
+  // the stats system's, which is not always the schedule's.
+  private earlierClubs(career: Row[] | undefined, teamCode: string, teamName: string) {
+    const present = new Set([clubKey(teamCode), clubKey(teamName)].filter(Boolean));
+    const seen = new Set<string>();
+    const clubs: Row[] = [];
+    for (const row of career ?? []) {
+      const keys = [row.team_code, row.stat_net_team, row.team].map(clubKey);
+      if (keys.some((key) => present.has(key))) continue;
+      const key = clubKey(row.team);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      clubs.push(row);
+    }
+    if (!clubs.length) return nothing;
+    return html`<div class="player-clubs">
+      <span class="player-clubs-label">Tidigare klubbar:</span>
+      ${clubs.map(
+        (club) => html`<span class="player-club"
+          >${club.logo ? html`<img src=${club.logo} alt="" loading="lazy" />` : nothing}${club.team}</span
+        >`,
+      )}
+    </div>`;
+  }
+
+  // Season by season, as far back as the league's records go: the Swedish
+  // leagues only, so a season abroad or in junior hockey is simply missing.
+  private career(career: Row[] | undefined, goalie: boolean) {
+    if (!career?.length) return nothing;
+    const columns: [string, string][] = goalie
+      ? [["GP", "M"], ["SVS_perc", "Rädd%"], ["GAA", "GAA"]]
+      : [["GP", "M"], ["G", "Mål"], ["A", "Ass"], ["TP", "P"]];
+    const cell = (row: Row, key: string) => {
+      const value = row[key];
+      if (value === null || value === undefined || value === "") return "–";
+      return key === "SVS_perc" ? Number(value).toFixed(1) : value;
+    };
+    let previous: number | null = null;
+    return html`
+      <div class="team-section">Karriär</div>
+      <div class="career ${goalie ? "goalie" : ""}">
+        <div class="career-row head">
+          <span>Säsong</span><span class="career-club">Klubb</span>
+          ${columns.map(([, label]) => html`<span>${label}</span>`)}
+        </div>
+        ${career.map((row) => {
+          // The season is written once, on its first line.
+          const first = row.season !== previous;
+          previous = row.season;
+          return html`<div class="career-row ${first ? "new-season" : ""}">
+            <span class="career-season">${first ? seasonLabel(row.season) : ""}</span>
+            <span class="career-club">
+              ${row.logo
+                ? html`<img class="career-logo" src=${row.logo} alt="" loading="lazy" />`
+                : html`<span class="career-logo"></span>`}
+              <span class="career-names">
+                <span class="career-team">${row.team}</span>
+                ${row.competition ? html`<span class="career-comp">${row.competition}</span>` : nothing}
+              </span>
+            </span>
+            ${columns.map(([key]) => html`<span class=${key === "TP" ? "career-points" : ""}>${cell(row, key)}</span>`)}
+          </div>`;
+        })}
+      </div>
     `;
   }
 
@@ -161,4 +232,10 @@ export class HockeyPlayerView extends PartElement {
       </div>
     `;
   }
+}
+
+// A season goes by the year it began in; on screen it is both years, "25/26".
+function seasonLabel(season: number): string {
+  const two = (year: number) => String(year % 100).padStart(2, "0");
+  return `${two(season)}/${two(season + 1)}`;
 }

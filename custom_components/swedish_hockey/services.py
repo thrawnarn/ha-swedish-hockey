@@ -7,6 +7,7 @@ the services hand back the same normalised structures for both leagues.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import replace
@@ -91,6 +92,7 @@ ATTR_GAME_ID = "game_id"
 ATTR_PLAYER = "player"
 ATTR_BEFORE = "before"
 ATTR_HIGHLIGHTS = "highlights"
+ATTR_DETAILS = "details"
 ATTR_LAST = "last"
 ATTR_LIVE = "live"
 ATTR_SCORE = "score"
@@ -110,7 +112,12 @@ _TEAM_SCHEMA = _ENTRY_SCHEMA.extend({vol.Required(ATTR_TEAM): cv.string})
 _STANDINGS_SCHEMA = _ENTRY_SCHEMA.extend({vol.Optional(ATTR_LIVE): cv.boolean})
 # Without a game the recap is of the last one played, which is what a bot
 # command wants; a card hands back the id of the row someone tapped.
-_RECAP_SCHEMA = _TEAM_SCHEMA.extend({vol.Optional(ATTR_GAME_ID): cv.string})
+_RECAP_SCHEMA = _TEAM_SCHEMA.extend(
+    {
+        vol.Optional(ATTR_GAME_ID): cv.string,
+        vol.Optional(ATTR_DETAILS, default=True): cv.boolean,
+    }
+)
 _RESULTS_SCHEMA = _TEAM_SCHEMA.extend(
     {
         vol.Optional(ATTR_LIMIT, default=10): vol.All(int, vol.Range(min=1, max=100)),
@@ -163,7 +170,9 @@ _HEAD_TO_HEAD_SCHEMA = _TEAM_SCHEMA.extend(
 )
 _SCHEDULE_SCHEMA = _ENTRY_SCHEMA.extend(
     {
-        vol.Optional(ATTR_LIMIT, default=20): vol.All(int, vol.Range(min=1, max=200)),
+        # A league plays some 364 games in a season (14 clubs, 52 rounds); a cap
+        # of 200 cut the schedule off in January.
+        vol.Optional(ATTR_LIMIT, default=20): vol.All(int, vol.Range(min=1, max=500)),
         # Without a team the whole league's fixtures come back. `before` says
         # how many already-played games to reach back for: none by default, so
         # what comes back is what is still to come.
@@ -502,6 +511,11 @@ async def _async_get_recap(call: ServiceCall) -> ServiceResponse:
     goals, the shots and how it was decided come from the same feed that fed
     the card while it was being played - not from whatever the live sensor
     happens to be holding, which is nothing at all after a restart.
+
+    With `details` off it leaves out the federation's game sheet and the clip.
+    The sheet is the slow one - its site takes two to three seconds over a game
+    nobody has opened lately - so the card asks for both answers at once and
+    shows this one while the full one is on its way.
     """
     entry = _entry(call)
     team = _team(entry, call)
@@ -532,24 +546,46 @@ async def _async_get_recap(call: ServiceCall) -> ServiceResponse:
         "standing": None,
     }
 
-    # The federation's sheet is the extra numbers, not the summary: a game it
-    # has no page for, or a page that cannot be read, leaves those out only.
-    sheet = None
-    if game.start <= dt_util.utcnow():
+    details = call.data.get(ATTR_DETAILS, True)
+    client = entry.runtime_data.client
+
+    async def _sheet() -> Any:
+        # The federation's sheet is the extra numbers, not the summary: a game
+        # it has no page for, or a page that cannot be read, leaves those out.
+        if not details or game.start > dt_util.utcnow():
+            return None
         try:
-            sheet = await entry.runtime_data.swehockey.async_sheet(game)
+            return await entry.runtime_data.swehockey.async_sheet(game)
         except HockeyApiError as err:
             _LOGGER.debug("No game sheet for the %s recap: %s", team.name, err)
+            return None
+
+    async def _clips() -> list[Any]:
+        # A highlights page that cannot be read is not worth losing the recap
+        # over.
+        if not details:
+            return []
+        try:
+            return await client.async_highlights(team)
+        except (HockeyApiError, NotImplementedError) as err:
+            _LOGGER.debug("No highlights to match against the recap: %s", err)
+            return []
+
+    async def _live() -> Any:
+        # A summary without the scorers is still worth having, so a feed that
+        # has already forgotten the game must not take the whole answer down.
+        try:
+            return await client.async_live_game(game)
+        except HockeyApiError as err:
+            _LOGGER.warning("No play-by-play for the %s recap: %s", team.name, err)
+            return None
+
+    # Three sites, none waiting on another.
+    sheet, clips, live = await asyncio.gather(_sheet(), _clips(), _live())
     recap["period_scores"] = list(sheet.period_scores) if sheet else []
     recap["sheet_url"] = sheet.url if sheet else None
 
-    # A summary without the scorers is still worth having, so a feed that has
-    # already forgotten the game must not take the whole answer down with it.
-    try:
-        live = await entry.runtime_data.client.async_live_game(game)
-    except HockeyApiError as err:
-        _LOGGER.warning("No play-by-play for the %s recap: %s", team.name, err)
-    else:
+    if live is not None:
         # StatNet's feed goes down, and is rate-limited on a busy evening; the
         # game record still knows the goals, which is better than a blank page.
         recap["events"] = _timeline(live.events, team) or _goal_timeline(
@@ -575,15 +611,9 @@ async def _async_get_recap(call: ServiceCall) -> ServiceResponse:
     if (row := data.standing_for(team.key)) is not None:
         recap["standing"] = row.as_dict()
 
-    # The clip for this game, if the league has published one. A highlights
-    # page that cannot be read is not worth losing the recap over.
-    try:
-        clips = await entry.runtime_data.client.async_highlights(team)
-    except (HockeyApiError, NotImplementedError) as err:
-        _LOGGER.debug("No highlights to match against the recap: %s", err)
-    else:
-        if (clip := _find_clip(clips, game)) is not None:
-            recap["highlight"] = clip.as_dict()
+    # The clip for this game, if the league has published one.
+    if (clip := _find_clip(clips, game)) is not None:
+        recap["highlight"] = clip.as_dict()
     return recap
 
 
@@ -1035,8 +1065,20 @@ async def _async_get_player(call: ServiceCall) -> ServiceResponse:
     if profile and (age := _age(profile.get("birth_date"))) is not None:
         profile["age"] = age
 
+    # Where he has played before, read off his page on the league's site; the
+    # page is found through the profile, so no profile means no career.
+    career: list[dict[str, Any]] | None = None
+    if profile and profile.get("slug"):
+        try:
+            career = await entry.runtime_data.client.async_player_career(
+                str(profile["slug"])
+            )
+        except (HockeyApiError, NotImplementedError) as err:
+            _LOGGER.debug("No career for %s: %s", wanted, err)
+
     return {
         "profile": profile,
+        "career": career,
         "stats_url": entry.runtime_data.client.players_url,
         "player": {
             "name": found.get("player"),

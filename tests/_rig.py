@@ -60,6 +60,38 @@ _util.dt = _mod(
     parse_datetime=_parse_datetime,
 )
 
+# What the coordinator needs besides; `calls_later` and `started` record what
+# it asks to have called later, since nothing here runs a loop to call it back.
+
+
+class _DataUpdateCoordinator:
+    def __class_getitem__(cls, item):
+        return cls
+
+
+calls_later: list[float] = []
+_mod("homeassistant.config_entries", ConfigEntry=object)
+class _CoreState:
+    starting = "starting"
+    running = "running"
+
+
+started: list = []
+_mod("homeassistant.core", CoreState=_CoreState, HomeAssistant=object, callback=lambda func: func)
+_mod("homeassistant.helpers.start", async_at_started=lambda hass, action: started.append(action))
+_mod("homeassistant.helpers")
+_mod("homeassistant.helpers.aiohttp_client", async_get_clientsession=lambda hass: None)
+_mod(
+    "homeassistant.helpers.event",
+    async_call_later=lambda hass, delay, action: calls_later.append((delay, action)),
+)
+_mod("homeassistant.helpers.storage", Store=object)
+_mod(
+    "homeassistant.helpers.update_coordinator",
+    DataUpdateCoordinator=_DataUpdateCoordinator,
+    UpdateFailed=Exception,
+)
+
 _package = types.ModuleType("sh")
 _package.__path__ = [COMP]
 sys.modules["sh"] = _package

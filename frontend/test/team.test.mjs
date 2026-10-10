@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { $, $$, callsTo, hassWith, mount, tap, text, unmount } from "./harness.mjs";
-import { OURS, TABLE } from "./fixture.mjs";
+import { $, $$, callsTo, deferred, hassWith, mount, settle, tap, text, unmount } from "./harness.mjs";
+import { CLUBS, OURS, TABLE, recap } from "./fixture.mjs";
 
 async function teamPage(hass = hassWith()) {
   const card = await mount(undefined, hass);
@@ -67,5 +67,72 @@ test("a played game opens its summary, and a scorer his page", async () => {
   assert.equal(text($(card, "hockey-player-view .recap-back")), "Sammanfattning");
   await tap(card, "hockey-player-view .recap-back");
   assert.ok($(card, "hockey-recap-view"));
+  unmount(card);
+});
+
+test("a player's page names his earlier clubs and lists his career by season", async () => {
+  const hass = hassWith();
+  const card = await teamPage(hass);
+  await tap(card, ".team-tabs button", "Spelschema");
+  await tap(card, "hockey-team-view .fixture-row.tappable");
+  await tap(card, "hockey-recap-view .player-link", "Ada Berg");
+  // His present club is not an earlier one, and a club comes up once however
+  // many competitions he played for it in.
+  assert.deepEqual($$(card, ".player-club").map(text), [CLUBS[1].name]);
+  const rows = $$(card, ".career-row:not(.head)");
+  assert.equal(rows.length, 4);
+  assert.equal(text(rows[0].querySelector(".career-season")), "26/27");
+  assert.equal(text(rows[3].querySelector(".career-season")), "", "a season is written once");
+  assert.match(text(rows[2]), /SHL/);
+  assert.equal(text(rows[1].querySelector(".career-points")), "45");
+  unmount(card);
+});
+
+test("a game's summary shows without waiting for the game sheet and the clip", async () => {
+  // The full answer is held back, the way the federation's site holds a game
+  // nobody has opened lately for a few seconds.
+  const full = deferred();
+  const { period_scores, ...quick } = recap();
+  const hass = hassWith({
+    answers: {
+      get_recap: (data) =>
+        data.details === false
+          ? quick
+          : full.promise,
+    },
+  });
+  const card = await teamPage(hass);
+  await tap(card, ".team-tabs button", "Spelschema");
+  await tap(card, "hockey-team-view .fixture-row.tappable");
+  const asked = callsTo(hass, "get_recap");
+  assert.equal(asked.length, 2, "the quick and the full summary are asked for together");
+  assert.equal(asked[0].data.game_id, asked[1].data.game_id);
+  assert.ok($(card, "hockey-recap-view .scoreboard.over"), "the quick one is drawn already");
+  assert.ok($(card, "hockey-recap-view .player-link"));
+  assert.equal($(card, ".recap-highlight"), null);
+
+  full.resolve({
+    ...recap(),
+    highlight: { url: "https://example.invalid/clip", heading: "Norrby vs. Söderby", subheading: "Omgång 1" },
+  });
+  await settle(card);
+  assert.ok($(card, ".recap-highlight"), "the clip joins when the full one arrives");
+  unmount(card);
+});
+
+test("a full summary that fails leaves the quick one on show", async () => {
+  const hass = hassWith({
+    answers: {
+      get_recap: (data) => {
+        if (data.details === false) return recap();
+        throw new Error("stats.swehockey.se is down");
+      },
+    },
+  });
+  const card = await teamPage(hass);
+  await tap(card, ".team-tabs button", "Spelschema");
+  await tap(card, "hockey-team-view .fixture-row.tappable");
+  assert.ok($(card, "hockey-recap-view .scoreboard.over"));
+  assert.equal($(card, "hockey-recap-view .recap-note"), null);
   unmount(card);
 });

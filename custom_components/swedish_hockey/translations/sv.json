@@ -179,6 +179,10 @@
         "game_id": {
           "name": "Match",
           "description": "Vilken match som ska sammanfattas. Standard är den senast spelade."
+        },
+        "details": {
+          "name": "Detaljer",
+          "description": "Ta med förbundets matchprotokoll och höjdpunkterna. Av ger ett snabbare svar utan dem."
         }
       }
     },
@@ -210,7 +214,7 @@
     },
     "get_player": {
       "name": "Hämta spelare",
-      "description": "Returnerar en spelares statistik för säsongen.",
+      "description": "Returnerar en spelares statistik för säsongen, och klubbarna och serierna han spelat i tidigare.",
       "fields": {
         "config_entry_id": {
           "name": "Serie",

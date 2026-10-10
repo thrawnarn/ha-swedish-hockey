@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -82,6 +84,10 @@ _REFERENCE_WAIT = 60
 # A goal the stream has counted but not described yet is held this long for
 # its scorer before it is announced without one.
 _PUSH_DETAIL_WAIT = 5
+# A goal taken back is remembered this long, so that if the feed only stumbled
+# - one stale reading, then the goal again - it comes back without a second
+# announcement.
+_RETRACT_KEEP = timedelta(minutes=5)
 # Which goals have been announced, kept across restarts so a restart in the
 # middle of a game does not announce the whole game again.
 _GOAL_LOG_VERSION = 1
@@ -318,6 +324,10 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
         self.game: Game | None = None
         self.is_live = False
         self._data_game_uid: str | None = None
+        # The next poll is one the push stream asked for, on a goal: it must
+        # not be answered from the last reading.
+        self._fresh = False
+        self._announce_on_start = False
         # The federation's sheet for the same game, read beside the feed.
         self.sheet: GameSheet | None = None
         self._sheet_game_uid: str | None = None
@@ -391,7 +401,8 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
         # Only carry readings forward within the same game.
         previous = self.data if self._data_game_uid == game.uid else None
         try:
-            live = await self._schedule.client.async_live_game(game, previous)
+            fresh, self._fresh = self._fresh, False
+            live = await self._schedule.client.async_live_game(game, previous, fresh=fresh)
         except HockeyApiError as err:
             raise UpdateFailed(str(err)) from err
         self._data_game_uid = game.uid
@@ -507,6 +518,7 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
 
         # The poll fills in what the stream leaves out - and is the one that
         # says the game is over - so ask it now rather than at its next turn.
+        self._fresh = True
         self.config_entry.async_create_task(
             self.hass, self.async_request_refresh(), eager_start=True
         )
@@ -522,6 +534,17 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
     @callback
     def _async_announce_later(self, _now: Any) -> None:
         self._push_wait = None
+        self._async_announce(self.merged, self.game, self.data)
+
+    @callback
+    def _async_announce_started(self, _hass: HomeAssistant) -> None:
+        self._announce_on_start = False
+        self._async_announce(self.merged, self.game, self.data)
+
+    @callback
+    def _async_look_again(self, _now: Any) -> None:
+        # A plain lambda here was run in a worker thread - Home Assistant only
+        # keeps a callback on the loop - and firing from there is refused.
         self._async_announce(self.merged, self.game, self.data)
 
     @callback
@@ -550,11 +573,24 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
         `async_set_goal_reference`), so a message can be edited rather than a
         second one sent; with no reference after a minute it goes without.
 
+        A goal that drops off the score is forgotten, so the one that replaces
+        it is announced; but if the same goal comes back within
+        `_RETRACT_KEEP` - the feed only served one stale reading - it is taken
+        back in quietly rather than announced twice.
+
         A game seen for the first time when it is already over - after a long
         restart, or the first time this runs - is noted without a word: those
         goals are old news.
         """
         if live is None or game is None or self._goal_log is None:
+            return
+        if self.hass.state is not CoreState.running:
+            # Automations listen only once Home Assistant has started; an
+            # event fired before then - a game that ended during a restart -
+            # reaches no one, and would be marked as sent all the same.
+            if not self._announce_on_start:
+                self._announce_on_start = True
+                async_at_started(self.hass, self._async_announce_started)
             return
         now = dt_util.utcnow()
         record = self._goal_log.get(game.uid)
@@ -578,11 +614,18 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
         kept = [
             score for score in record["goals"] if sum(parse_score(score) or (0, 0)) <= total_now
         ]
+        retracted: dict[str, dict[str, Any]] = record.setdefault("retracted", {})
         if kept != record["goals"]:
             for score in set(record["goals"]) - set(kept):
-                details.pop(score, None)
+                if (detail := details.pop(score, None)) is not None:
+                    retracted[score] = detail | {"retracted_at": now.isoformat()}
             record["goals"] = kept
             changed = True
+        for score, detail in list(retracted.items()):
+            at = dt_util.parse_datetime(detail.get("retracted_at") or "")
+            if at is None or now - at > _RETRACT_KEEP:
+                del retracted[score]
+                changed = True
         announced: list[str] = record["goals"]
 
         feed_goals = {id(goal) for goal in (feed.goals if feed else [])}
@@ -592,15 +635,23 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
             source = "poll" if id(goal) in feed_goals else "push"
             if goal.score not in announced:
                 announced.append(goal.score)
-                details[goal.score] = self._detail(goal, now)
                 changed = True
-                self.hass.bus.async_fire(
-                    EVENT_GOAL,
-                    self._event_data(game)
-                    | goal.as_dict()
-                    | {"ours": self._is_ours(goal), "source": source},
-                )
-                continue
+                gone = retracted.pop(goal.score, None)
+                if gone is not None and _same_goal(goal, self._is_ours(goal), gone):
+                    # The feed went back a goal and forward again: it is the
+                    # goal already announced, so take it back in, reference
+                    # and all, and let anything new about it go as an update.
+                    gone.pop("retracted_at", None)
+                    details[goal.score] = gone
+                else:
+                    details[goal.score] = self._detail(goal, now)
+                    self.hass.bus.async_fire(
+                        EVENT_GOAL,
+                        self._event_data(game)
+                        | goal.as_dict()
+                        | {"ours": self._is_ours(goal), "source": source},
+                    )
+                    continue
 
             known = details.get(goal.score)
             if known is None:
@@ -621,11 +672,7 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
                 if known.get("reference") is None:
                     # Nothing else may come along to send it once the wait is
                     # over - the game can end - so look again then.
-                    async_call_later(
-                        self.hass,
-                        _REFERENCE_WAIT + 1,
-                        lambda _now: self._async_announce(self.merged, self.game, self.data),
-                    )
+                    async_call_later(self.hass, _REFERENCE_WAIT + 1, self._async_look_again)
             if known.get("pending") and self._async_fire_update(game, known, now):
                 changed = True
 
@@ -1261,6 +1308,35 @@ def table_rows(
             )
         rows.append(entry)
     return rows
+
+
+def _same_goal(goal: Goal, ours: bool, known: dict[str, Any]) -> bool:
+    """Return True if a goal is one announced before, as far as can be told.
+
+    The same side, in the same period, at much the same time on the clock and
+    by the same player - each compared only where both readings say. The
+    shirt number is left out: one feed gives it and another does not.
+    """
+    if ours != bool(known.get("ours")):
+        return False
+    if goal.period and known.get("period") and str(goal.period) != str(known["period"]):
+        return False
+    seconds, known_seconds = _clock_seconds(goal.time), _clock_seconds(known.get("time"))
+    if seconds is not None and known_seconds is not None and abs(seconds - known_seconds) > 60:
+        return False
+    name, known_name = _player(goal.scorer), _player(known.get("scorer"))
+    return not (name and known_name and name != known_name)
+
+
+def _clock_seconds(value: str | None) -> int | None:
+    """Return "04:46" as seconds."""
+    match = re.fullmatch(r"\s*(\d+):(\d{2})\s*", value or "")
+    return int(match[1]) * 60 + int(match[2]) if match else None
+
+
+def _player(value: str | None) -> str:
+    """Return a player's name without the shirt number, for comparing."""
+    return re.sub(r"^#?\d+\s+", "", (value or "").strip()).casefold()
 
 
 def _richer(goal: Goal, known: dict[str, Any]) -> bool:

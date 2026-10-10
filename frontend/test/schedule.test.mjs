@@ -26,6 +26,14 @@ test("the schedule lists the season by day, our games marked, the next game flag
   unmount(card);
 });
 
+test("every game says which round it belongs to", async () => {
+  const card = await schedule();
+  const rows = $$(card, "hockey-schedule-view .fixture-row");
+  assert.equal(text(rows[0].querySelector(".fixture-round")), `Omgång ${GAMES[0].round}`);
+  assert.equal($$(card, "hockey-schedule-view .fixture-round").length, GAMES.length);
+  unmount(card);
+});
+
 test("one button chooses the clubs; with none chosen it says all", async () => {
   const card = await schedule();
   const bar = $(card, "hockey-schedule-view .filter-bar");

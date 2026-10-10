@@ -179,6 +179,10 @@
         "game_id": {
           "name": "Game",
           "description": "Which game to recap. Defaults to the most recent one played."
+        },
+        "details": {
+          "name": "Details",
+          "description": "Include the federation's game sheet and the highlights clip. Off answers faster without them."
         }
       }
     },
@@ -210,7 +214,7 @@
     },
     "get_player": {
       "name": "Get player",
-      "description": "Return a player's statistics for the season so far.",
+      "description": "Return a player's statistics for the season so far, and the clubs and leagues he has played in before.",
       "fields": {
         "config_entry_id": {
           "name": "League",

@@ -23,6 +23,10 @@ export const TABLE_CUTS = [6, 10, 12];
 // How many played games the league schedule reaches back over.
 export const SCHEDULE_BEFORE = 100;
 
+// How many games the league schedule asks for in all: enough for the played
+// ones above and the rest of a season after them. 200 stopped in January.
+export const SCHEDULE_LIMIT = 500;
+
 // The roster opens on points, the way a league prints one.
 export const ROSTER_SORT = { key: "TP", dir: "desc" as "asc" | "desc" };
 

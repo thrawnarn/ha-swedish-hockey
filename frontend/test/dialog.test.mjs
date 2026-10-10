@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { $, $$, CARD_CONFIG, callsTo, deferred, hassWith, mount, settle, tap, text, unmount } from "./harness.mjs";
-import { liveSensor, sensors, TABLE } from "./fixture.mjs";
+import { GAMES, liveSensor, NEXT_INDEX, sensors, TABLE } from "./fixture.mjs";
 
 const dialogOf = (card) => $(card, "dialog:not(.picker)");
 
@@ -45,7 +45,7 @@ test("the tabs move between the league's views, each read when first opened", as
   await tap(card, ".dialog-nav .bar-button", "Spelschema");
   assert.ok($(card, "hockey-schedule-view .fixture-row"));
   assert.deepEqual(callsTo(hass, "get_schedule")[0].data, {
-    config_entry_id: "entry-1", limit: 200, before: 100, highlights: true,
+    config_entry_id: "entry-1", limit: 500, before: 100, highlights: true,
   });
   assert.equal(callsTo(hass, "get_schedule")[0].returnResponse, true);
 
@@ -171,5 +171,29 @@ test("earlier results come from the sensor at once, then the service's ten", asy
     config_entry_id: "entry-1", team: "NOR", limit: 10, highlights: true,
   });
   assert.ok($$(card, "hockey-results-view .fixture-row").length > 0);
+  unmount(card);
+});
+
+test("a finished game in the day's list says so, and one being played or to come does not", async () => {
+  const [a, b, c] = GAMES.slice(NEXT_INDEX, NEXT_INDEX + 3);
+  const games = [
+    { ...a, home_score: 3, away_score: 1, state: "post-game", in_progress: false },
+    { ...b, home_score: 1, away_score: 0, state: "ongoing", in_progress: true, period: 2 },
+    c,
+  ];
+  const hass = hassWith({ answers: { get_live: () => ({ games }) } });
+  const card = await mount(CARD_CONFIG, hass);
+  await tap(card, ".footer-bar .bar-button", "Tabell");
+  await tap(card, ".dialog-nav .bar-button", "Matcher");
+  const rows = $$(card, "hockey-today-view .fixture-row");
+  assert.equal(rows.length, 3);
+  assert.ok(rows[0].classList.contains("ended"));
+  assert.equal(text(rows[0].querySelector(".fixture-final")), "Slut");
+  assert.ok(rows[0].querySelector(".fixture-clock"), "the start time stays, under the word");
+  for (const row of rows.slice(1)) {
+    assert.ok(!row.classList.contains("ended"));
+    assert.equal(row.querySelector(".fixture-final"), null);
+  }
+  assert.ok(rows[1].querySelector(".fixture-live"));
   unmount(card);
 });

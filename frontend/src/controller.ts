@@ -10,7 +10,7 @@
  */
 
 import { errorText } from "./base";
-import { SCHEDULE_BEFORE, ROSTER_SORT } from "./constants";
+import { SCHEDULE_BEFORE, SCHEDULE_LIMIT, ROSTER_SORT } from "./constants";
 import { clubColour } from "./format";
 import { STATS_FRESH, STATS_PAGE, STATS_SCOPES } from "./stats-model";
 import { clubKey, findTeams, teamMatches } from "./teams";
@@ -477,7 +477,7 @@ export class HockeyController {
     const token = this.newRequest();
     this.schedule = { loading: true, before, teams: this.schedule?.teams ?? [] };
     try {
-      const data = await this.ask("get_schedule", { limit: 200, before, highlights: true });
+      const data = await this.ask("get_schedule", { limit: SCHEDULE_LIMIT, before, highlights: true });
       if (this.stale(token)) return;
       this.schedule = {
         games: data?.games ?? [],
@@ -834,16 +834,34 @@ export class HockeyController {
     if (!row?.game_id && !row?.latest) return;
     const token = this.newRequest();
     this.recap = { loading: true, row };
-    try {
-      const data = await this.ask("get_recap", {
+    const ask = (details: boolean) =>
+      this.ask("get_recap", {
         team: teamCode || this.teamRef(),
         ...(row.game_id ? { game_id: row.game_id } : {}),
+        ...(details ? {} : { details: false }),
       });
+    // The federation's game sheet takes seconds over a game nobody has
+    // opened lately, so the summary without it (and without the clip) is
+    // asked for alongside and shown first; the full one replaces it.
+    let full = false;
+    const quick = ask(false)
+      .then((data) => {
+        if (!this.stale(token) && !full) this.recap = { row, data, more: true };
+        return data;
+      })
+      .catch(() => null);
+    try {
+      const data = await ask(true);
+      full = true;
       if (this.stale(token)) return;
       this.recap = { row, data };
     } catch (err) {
+      full = true;
+      const data = await quick;
       if (this.stale(token)) return;
-      this.recap = { row, error: errorText(err) };
+      // The quick answer is still a summary; only with nothing to show is
+      // the error worth the space.
+      this.recap = data ? { row, data } : { row, error: errorText(err) };
     }
   }
 

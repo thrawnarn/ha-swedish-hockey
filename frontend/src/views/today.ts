@@ -71,7 +71,12 @@ export class HockeyTodayView extends PartElement {
     else {
       body = html`
         ${games.map((game: any) =>
-          fixtureRow(ctx, game, null, { hideDate: true, markSelf: true, live: offset === 0 }),
+          fixtureRow(ctx, game, null, {
+            hideDate: true,
+            markSelf: true,
+            live: offset === 0,
+            ended: true,
+          }),
         )}
         ${updated && offset === 0
           ? html`<div class="live-updated">

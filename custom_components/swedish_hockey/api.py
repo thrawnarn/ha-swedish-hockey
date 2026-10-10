@@ -13,11 +13,12 @@ endpoints the official sites use in the browser:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
@@ -71,12 +72,30 @@ HA_PLAYERS_PAGE_URL = "https://hockeyallsvenskan.se/pages/alla-spelare"
 # Who a player is, as opposed to what he has done: picture, position, height,
 # weight, where he came from.
 HA_PLAYERS_API_URL = "https://hockeyallsvenskan.se/api/all-players"
+# A player's own page carries his career, season by season, in the props of
+# its flight payload; the page builds the table out of them in the browser.
+HA_PLAYER_PAGE_URL = "https://hockeyallsvenskan.se/players/{slug}"
+# The career names clubs by code only. The league's catalogue names them, one
+# season of its own clubs at a time; a past season's never changes.
+HA_CLUB_CATALOGUE_URL = "https://hockeyallsvenskan.se/api/all-time-teams-catalog"
 # The roster endpoint pages at a hundred, so the league is four reads. Squads
 # change between games rather than during one, so they are kept for a while.
 HA_PROFILE_PAGE = 100
 HA_PROFILE_TTL = 6 * 3600
 # One page carries every club's clips, so it is read once and shared out.
 HA_CLIPS_TTL = 600
+# StatNet's play-by-play is rate-limited by address, and on a game night one
+# reading every poll was enough to be refused most of the time. So it is read
+# when the game record - which is not limited - shows something has happened,
+# or every HA_PBP_QUIET seconds for the shots and events in between; a reading
+# younger than HA_PBP_SHARED answers the services too, rather than each asking
+# again. A refusal stops all reading for HA_PBP_BACKOFF_MIN seconds, doubling
+# while refusals go on, up to HA_PBP_BACKOFF_MAX; the record carries the score
+# meanwhile.
+HA_PBP_QUIET = 60
+HA_PBP_SHARED = 30
+HA_PBP_BACKOFF_MIN = 60
+HA_PBP_BACKOFF_MAX = 300
 HA_SKATERS_URL = "https://hockeyallsvenskan.se/api/all-time-skaters-stats"
 HA_GOALIES_URL = "https://hockeyallsvenskan.se/api/all-time-goalkeepers-stats"
 # The clubs' own figures - power play, shots, face-offs, the crowd - one
@@ -100,6 +119,10 @@ _FLIGHT_CHUNK = re.compile(r"self\.__next_f\.push\(\s*\[\s*1\s*,")
 
 class HockeyApiError(Exception):
     """Raised when a league API cannot be reached or understood."""
+
+
+class HockeyRateLimited(HockeyApiError):
+    """Raised when a league API answers 429: too many requests from here."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,6 +445,12 @@ class LeagueClient:
         """Return the current score of each of the given games, keyed by uid."""
         raise NotImplementedError
 
+    async def _async_record(self, game: Game) -> dict[str, Any]:
+        """Return the game's record: its totals, period and whether it is over."""
+        payload = await self._async_get(HA_GAME_URL.format(game=game.uid))
+        rows = (payload or {}).get("data") if isinstance(payload, dict) else None
+        return rows[0] if rows and isinstance(rows[0], dict) else {}
+
     async def async_player_stats(self, team: Team) -> list[dict[str, Any]]:
         """Return this season's stats for everyone who has played for a team."""
         raise NotImplementedError
@@ -433,9 +462,14 @@ class LeagueClient:
         raise NotImplementedError
 
     async def async_live_game(
-        self, game: Game, previous: LiveGame | None = None
+        self, game: Game, previous: LiveGame | None = None, *, fresh: bool = False
     ) -> LiveGame:
-        """Return the live state and goals of a game."""
+        """Return the live state and goals of a game.
+
+        `previous` is the caller's last reading of the same game, which a
+        client may hand back when nothing has changed; `fresh` asks for a new
+        reading regardless, as when the push stream has just seen a goal.
+        """
         raise NotImplementedError
 
     async def async_highlights(self, team: Team) -> list[Clip]:
@@ -460,6 +494,10 @@ class LeagueClient:
         """Return who every player in the league is: picture, position, shirt."""
         raise NotImplementedError
 
+    async def async_player_career(self, slug: str) -> list[dict[str, Any]]:
+        """Return a player's career, season by season."""
+        raise NotImplementedError
+
     async def _async_get(
         self,
         url: str,
@@ -475,6 +513,8 @@ class LeagueClient:
             async with self._session.get(
                 url, params=params, headers=request_headers, timeout=TIMEOUT
             ) as response:
+                if response.status == 429:
+                    raise HockeyRateLimited(f"Too many requests to {url}")
                 response.raise_for_status()
                 if as_json:
                     return await response.json(content_type=None)
@@ -493,6 +533,8 @@ class LeagueClient:
                 headers={"User-Agent": USER_AGENT},
                 timeout=TIMEOUT,
             ) as response:
+                if response.status == 429:
+                    raise HockeyRateLimited(f"Too many requests to {url}")
                 response.raise_for_status()
                 return await response.json(content_type=None)
         except (ClientError, TimeoutError) as err:
@@ -603,7 +645,7 @@ class ShlClient(LeagueClient):
         return standings
 
     async def async_live_game(
-        self, game: Game, previous: LiveGame | None = None
+        self, game: Game, previous: LiveGame | None = None, *, fresh: bool = False
     ) -> LiveGame:
         """Return the live state of an SHL game."""
         events = await self._async_get(SHL_PBP_URL.format(game=game.uid))
@@ -853,7 +895,16 @@ class HockeyallsvenskanClient(LeagueClient):
         """Initialise the client with room to remember the league's players."""
         super().__init__(session)
         self._profiles: tuple[float, list[dict[str, Any]]] | None = None
+        # Club names by season, and when each season was read; see
+        # _async_club_names.
+        self._clubs: dict[int, tuple[float, dict[str, dict[str, Any]]]] = {}
         self._clips_page: tuple[float, str] | None = None
+        # The last reading of each game, from whichever source, and when
+        # play-by-play was last read for it; see HA_PBP_QUIET.
+        self._latest: dict[str, tuple[float, LiveGame]] = {}
+        self._pbp_at: dict[str, float] = {}
+        self._pbp_until = 0.0
+        self._pbp_backoff = 0
 
     async def _async_clips_page(self) -> str:
         """Return the highlights page, briefly kept between calls."""
@@ -924,6 +975,66 @@ class HockeyallsvenskanClient(LeagueClient):
 
         self._profiles = (now, players)
         return players
+
+    async def async_player_career(self, slug: str) -> list[dict[str, Any]]:
+        """Return a player's career, newest season first, one row per club and
+        competition: the SHL and both its playoffs and qualifiers as well as
+        this league's own.
+
+        The league keeps the Swedish leagues only, from about 2005: seasons
+        abroad or in junior hockey are simply not there.
+        """
+        page = await self._async_get(
+            HA_PLAYER_PAGE_URL.format(slug=slug), headers={"RSC": "1"}, as_json=False
+        )
+        rows = _career_rows(page)
+        names = await self._async_club_names({row["Season"] for row in rows})
+        career = [_career_row(row, names) for row in rows]
+        # Within a season the series comes before its playoffs or qualifiers;
+        # the page lists them in no order of its own.
+        career.sort(
+            key=lambda row: (
+                -row["season"],
+                row["competition_code"] not in _SERIES,
+            )
+        )
+        return career
+
+    async def _async_club_names(
+        self, seasons: set[int]
+    ) -> dict[int, dict[str, dict[str, Any]]]:
+        """Return the catalogue's clubs for each of the seasons asked about.
+
+        A season that cannot be read is left out rather than failing the
+        career; its clubs fall back to another season's name, or their code.
+        """
+        now = time.monotonic()
+        current = season_year()
+
+        def fresh(season: int) -> bool:
+            kept = self._clubs.get(season)
+            return kept is not None and (
+                season != current or now - kept[0] < HA_PROFILE_TTL
+            )
+
+        async def read(season: int) -> None:
+            try:
+                body = await self._async_post(
+                    HA_CLUB_CATALOGUE_URL,
+                    {"league": "HA", "phase": "HA", "season": str(season)},
+                )
+            except HockeyApiError as err:
+                _LOGGER.debug("No club catalogue for %s: %s", season, err)
+                return
+            clubs = (body or {}).get("teamDisplayMap") if isinstance(body, dict) else None
+            if isinstance(clubs, dict):
+                self._clubs[season] = (
+                    now,
+                    {str(code): club for code, club in clubs.items() if isinstance(club, dict)},
+                )
+
+        await asyncio.gather(*(read(season) for season in seasons if not fresh(season)))
+        return {season: kept[1] for season, kept in self._clubs.items()}
 
     async def async_league_profiles(self) -> list[dict[str, Any]]:
         """Return who every player in the league is, from the kept roster."""
@@ -1042,18 +1153,50 @@ class HockeyallsvenskanClient(LeagueClient):
         raise HockeyApiError("Could not read the Hockeyallsvenskan table")
 
     async def async_live_game(
-        self, game: Game, previous: LiveGame | None = None
+        self, game: Game, previous: LiveGame | None = None, *, fresh: bool = False
     ) -> LiveGame:
         """Return the live state of a Hockeyallsvenskan game.
 
         The play-by-play lookup is keyed on the game number, both teams and the
-        scheduled date. That feed comes from StatNet and does go down mid-game,
-        so when it does we fall back to the score on the game record - fewer
-        details, but the score and period keep flowing.
+        scheduled date. That feed comes from StatNet, which goes down mid-game
+        and refuses an address that asks too often; either way we fall back to
+        the score on the game record - fewer details, but the score and period
+        keep flowing. How often it is asked: see HA_PBP_QUIET.
         """
         if not game.stat_net_number or not game.home_ext_id or not game.away_ext_id:
             raise HockeyApiError(f"No live-feed identifiers for game {game.uid}")
 
+        now = time.monotonic()
+        latest = self._latest.get(game.uid)
+        if previous is None and latest and not fresh and now - latest[0] < HA_PBP_SHARED:
+            # Someone - the live sensor, as a rule - has just read this game.
+            return latest[1]
+        known = previous or (latest[1] if latest else None)
+        if now < self._pbp_until:
+            live = await self._async_live_from_record(game, known)
+        elif (
+            not fresh
+            and previous is not None
+            and now - self._pbp_at.get(game.uid, float("-inf")) < HA_PBP_QUIET
+            # A goal the record found while play-by-play was refused has no
+            # scorer yet, and the scorer is worth asking for.
+            and (not previous.goals or previous.goals[-1].scorer)
+        ):
+            raw = await self._async_record(game)
+            if _record_moved(raw, previous):
+                live = await self._async_play_by_play(game, known, now)
+            else:
+                period = _as_round(raw.get("currentPeriod"))
+                live = replace(previous, current_period=period or previous.current_period)
+        else:
+            live = await self._async_play_by_play(game, known, now)
+        self._latest[game.uid] = (now, live)
+        return live
+
+    async def _async_play_by_play(
+        self, game: Game, known: LiveGame | None, now: float
+    ) -> LiveGame:
+        """Read StatNet's play-by-play, or the record if it will not answer."""
         try:
             payload = await self._async_post(
                 HA_PBP_URL,
@@ -1064,12 +1207,23 @@ class HockeyallsvenskanClient(LeagueClient):
                     "scheduledDateTime": game.start.isoformat(),
                 },
             )
+        except HockeyRateLimited:
+            self._pbp_backoff = min(
+                max(self._pbp_backoff * 2, HA_PBP_BACKOFF_MIN), HA_PBP_BACKOFF_MAX
+            )
+            self._pbp_until = now + self._pbp_backoff
+            _LOGGER.debug(
+                "Play-by-play refused us, using the score for %s s", self._pbp_backoff
+            )
+            return await self._async_live_from_record(game, known)
         except HockeyApiError as err:
             _LOGGER.debug("Play-by-play unavailable (%s), using the score", err)
-            return await self._async_live_from_record(game, previous)
+            return await self._async_live_from_record(game, known)
 
+        self._pbp_backoff = 0
+        self._pbp_at[game.uid] = now
         if not isinstance(payload, dict):
-            return await self._async_live_from_record(game, previous)
+            return await self._async_live_from_record(game, known)
 
         info = payload.get("game_info") or {}
         goals: list[Goal] = []
@@ -1163,9 +1317,7 @@ class HockeyallsvenskanClient(LeagueClient):
         The record carries totals, not events, so each new goal is worked out by
         comparing against the last reading. Scorer and assists are unavailable.
         """
-        payload = await self._async_get(HA_GAME_URL.format(game=game.uid))
-        rows = (payload or {}).get("data") if isinstance(payload, dict) else None
-        raw = rows[0] if rows else {}
+        raw = await self._async_record(game)
 
         home = _as_int(raw.get("homeScore")) or 0
         away = _as_int(raw.get("awayScore")) or 0
@@ -1832,7 +1984,105 @@ def _ha_profile(raw: dict[str, Any]) -> dict[str, Any]:
         "photo_large": shots.get("large") or shots.get("medium"),
         "team": (raw.get("team") or {}).get("shortName"),
         "team_name": (raw.get("team") or {}).get("name"),
+        "slug": raw.get("slug"),
+        "url": HA_PLAYER_PAGE_URL.format(slug=raw["slug"]) if raw.get("slug") else None,
     }
+
+
+# What the career calls each competition, in the words the card uses.
+_COMPETITIONS = {
+    "HA": "Hockeyallsvenskan",
+    "HAPlayoff": "HA-slutspel",
+    "HAkval": "HA-kval",
+    "Elitserien": "SHL",
+    "SMSlutspel": "SHL-slutspel",
+    "PlayIn": "SHL play in",
+    "SHLkval": "SHL-kval",
+    "KvalTillSHL": "SHL-kval",
+}
+# The regular seasons, as opposed to the playoffs and qualifiers after them.
+_SERIES = {"HA", "Elitserien"}
+# The catalogue only knows clubs that have played in this league, and these
+# four have not since the career records begin.
+_SHL_ONLY_CLUBS = {
+    "FBK": "Färjestad",
+    "FHC": "Frölunda",
+    "LHC": "Linköping",
+    "LHF": "Luleå",
+}
+
+
+def _career_rows(page: str) -> list[dict[str, Any]]:
+    """Pick the season-by-season rows out of a player page's flight payload.
+
+    That is the RSC stream, its JSON as it is; the HTML page carries the same
+    escaped once more, which this does not read.
+    """
+    marker = '"player_season_by_season_stats":'
+    start = page.find(marker)
+    if start < 0:
+        raise HockeyApiError("No career on the player's page")
+    try:
+        rows, _ = json.JSONDecoder().raw_decode(page, start + len(marker))
+    except ValueError as err:
+        raise HockeyApiError(f"Unreadable career on the player's page: {err}") from err
+    return [
+        row
+        for row in rows or []
+        if isinstance(row, dict) and isinstance(row.get("Season"), int) and row.get("TeamCode")
+    ]
+
+
+def _career_row(
+    raw: dict[str, Any], names: dict[int, dict[str, dict[str, Any]]]
+) -> dict[str, Any]:
+    """Return one line of a career, its club named and its figures as the
+    season's statistics name them."""
+    code = str(raw["TeamCode"])
+    season = int(raw["Season"])
+    # The club as it was called that season, else any other season's name for
+    # the code: the catalogue has a season only for its own clubs.
+    club = names.get(season, {}).get(code) or next(
+        (clubs[code] for _, clubs in sorted(names.items(), reverse=True) if code in clubs),
+        None,
+    )
+    kind = str(raw.get("GameType") or "")
+    row: dict[str, Any] = {
+        "season": season,
+        "team_code": (club or {}).get("shortName") or code,
+        # The stats system's own code, which is not always the schedule's
+        # (MIK against MORA); kept so either can be matched.
+        "stat_net_team": code,
+        "team": (club or {}).get("name") or _SHL_ONLY_CLUBS.get(code) or code,
+        "logo": (club or {}).get("logo"),
+        "competition": _COMPETITIONS.get(kind, kind or None),
+        "competition_code": kind or None,
+    }
+    if "GPI" in raw:
+        # A goalkeeper's GP counts the games he sat on the bench for; GPI is
+        # the ones he played. The save percentage comes back empty, so it is
+        # worked out from the saves.
+        shots, saves = _as_int(raw.get("SOGA")), _as_int(raw.get("SVS"))
+        row |= {
+            "role": "goalkeeper",
+            "GP": _as_int(raw.get("GPI")),
+            "W": _as_int(raw.get("W")),
+            "L": _as_int(raw.get("L")),
+            "SO": _as_int(raw.get("SO")),
+            "GAA": raw.get("GAA"),
+            "SVS_perc": round(saves / shots * 100, 2) if shots and saves is not None else None,
+        }
+    else:
+        row |= {
+            "role": "skater",
+            "GP": _as_int(raw.get("GP")),
+            "G": _as_int(raw.get("G")),
+            "A": _as_int(raw.get("A")),
+            "TP": _as_int(raw.get("TP")),
+            "PIM": _as_int(raw.get("PIM")),
+            "PlusMinus": _as_int(raw.get("PlusMinus")),
+        }
+    return row
 
 
 def season_year(moment: datetime | None = None) -> int:
@@ -2077,6 +2327,23 @@ def _as_int(value: Any) -> int | None:
         return int(value)
     except ValueError:
         return None
+
+
+def _record_moved(raw: dict[str, Any], previous: LiveGame) -> bool:
+    """Return True if the game record shows more than the last reading did.
+
+    A goal or the end: what play-by-play is worth reading for at once. A
+    record that says less is only behind, and is not news. A new period is
+    not either: play-by-play names it only once something happens in it, so
+    asking at once would ask on every poll until then; the record's period is
+    used instead.
+    """
+    home, away = parse_score(previous.score) or (0, 0)
+    if (_as_int(raw.get("homeScore")) or 0) > home:
+        return True
+    if (_as_int(raw.get("awayScore")) or 0) > away:
+        return True
+    return bool(raw.get("isCompleted") or raw.get("endedDateTime")) and not previous.finished
 
 
 def _as_round(value: Any) -> str | None:

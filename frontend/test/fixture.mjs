@@ -305,6 +305,13 @@ export function player(name = "Ada Berg") {
     player: { name, team: OURS.name, role: "skater" },
     profile: { name, jersey: "9", position: "Center", shoots: "L", height: 180, weight: 82, age: 24, country: "SWE" },
     stats: { GP: 8, G: 6, A: 2, TP: 8, PlusMinus: 3, PIM: 2, SOG: 20, TOI_GP: "17:30" },
+    // Two seasons here, one before that at another club in two competitions.
+    career: [
+      { season: 2026, team_code: OURS.code, stat_net_team: OURS.code, team: OURS.name, logo: OURS.logo, competition: "Hockeyallsvenskan", role: "skater", GP: 8, G: 6, A: 2, TP: 8 },
+      { season: 2025, team_code: OURS.code, stat_net_team: OURS.code, team: OURS.name, logo: OURS.logo, competition: "Hockeyallsvenskan", role: "skater", GP: 52, G: 20, A: 25, TP: 45 },
+      { season: 2024, team_code: CLUBS[1].code, stat_net_team: CLUBS[1].code, team: CLUBS[1].name, logo: CLUBS[1].logo, competition: "SHL", role: "skater", GP: 40, G: 3, A: 4, TP: 7 },
+      { season: 2024, team_code: CLUBS[1].code, stat_net_team: CLUBS[1].code, team: CLUBS[1].name, logo: CLUBS[1].logo, competition: "SHL-slutspel", role: "skater", GP: 4, G: 0, A: 0, TP: 0 },
+    ],
   };
 }
 
