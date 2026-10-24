@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -111,6 +112,14 @@ HA_GAME_URL = "https://hockeyallsvenskan.se/api/games?documentIds={game}"
 HA_SCORE_BATCH = 20
 HA_YOUTUBE_URL = "https://www.youtube.com/watch?v={video}"
 HA_YOUTUBE_THUMB = "https://img.youtube.com/vi/{video}/hqdefault.jpg"
+# The league's YouTube channel has a game's clip within the hour; the
+# highlights page has been seen a day behind it (Kalmar-Leksand 23/10 was on
+# YouTube at 23:19 and still not on the page the next morning). The channel's
+# feed holds only its last fifteen uploads, so it tops the page up rather than
+# replacing it.
+HA_YOUTUBE_FEED_URL = (
+    "https://www.youtube.com/feeds/videos.xml?channel_id=UCXwGjjrSiyHPTHXJlvYrEtQ"
+)
 
 _GAMES_KEY = re.compile(r'"games"\s*:\s*\[')
 _STANDINGS_KEY = re.compile(r'"standings"\s*:\s*\[')
@@ -899,6 +908,7 @@ class HockeyallsvenskanClient(LeagueClient):
         # _async_club_names.
         self._clubs: dict[int, tuple[float, dict[str, dict[str, Any]]]] = {}
         self._clips_page: tuple[float, str] | None = None
+        self._clips_feed: tuple[float, list[tuple[str, Clip]]] | None = None
         # The last reading of each game, from whichever source, and when
         # play-by-play was last read for it; see HA_PBP_QUIET.
         self._latest: dict[str, tuple[float, LiveGame]] = {}
@@ -917,7 +927,29 @@ class HockeyallsvenskanClient(LeagueClient):
         self._clips_page = (now, payload)
         return payload
 
+    async def _async_clips_feed(self) -> list[tuple[str, Clip]]:
+        """Return the channel's game clips, newest first; none if unreadable."""
+        now = time.monotonic()
+        if self._clips_feed and now - self._clips_feed[0] < HA_CLIPS_TTL:
+            return self._clips_feed[1]
+        try:
+            clips = parse_clip_feed(
+                await self._async_get(HA_YOUTUBE_FEED_URL, as_json=False)
+            )
+        except HockeyApiError as err:
+            # The page alone is what there was before; a feed that is down
+            # only means a clip turns up later.
+            _LOGGER.debug("Could not read the league's YouTube feed: %s", err)
+            clips = []
+        self._clips_feed = (now, clips)
+        return clips
+
     async def async_all_clips(self) -> list[Clip]:
+        """Return every published clip, whoever it belongs to."""
+        page = await self._async_page_clips()
+        return newer_from_feed(page, await self._async_clips_feed()) + page
+
+    async def _async_page_clips(self) -> list[Clip]:
         """Return every clip on the highlights page, whoever it belongs to."""
         clips: list[Clip] = []
         seen: set[str] = set()
@@ -1455,7 +1487,77 @@ class HockeyallsvenskanClient(LeagueClient):
                     video_id=str(video),
                 )
             )
-        return clips
+        feed = [
+            (published, clip)
+            for published, clip in await self._async_clips_feed()
+            if any(_is_club(side, team) for side in _clip_sides(clip))
+        ]
+        return newer_from_feed(clips, feed) + clips
+
+
+def parse_clip_feed(text: str) -> list[tuple[str, Clip]]:
+    """Return the game clips in a YouTube channel feed, newest first.
+
+    A game's clip is titled "Home vs. Away | Highlights 23/10"; the channel's
+    other uploads (a week's power-play goals) belong to no game and are left
+    out. Each comes with its upload time, as ISO text.
+    """
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as err:
+        raise HockeyApiError(f"Unreadable YouTube feed: {err}") from err
+    atom = "{http://www.w3.org/2005/Atom}"
+    yt = "{http://www.youtube.com/xml/schemas/2015}"
+    clips: list[tuple[str, Clip]] = []
+    for entry in root.iter(f"{atom}entry"):
+        video = (entry.findtext(f"{yt}videoId") or "").strip()
+        title = (entry.findtext(f"{atom}title") or "").strip()
+        published = (entry.findtext(f"{atom}published") or "").strip()
+        heading, _, rest = title.partition("|")
+        heading, rest = heading.strip(), rest.strip()
+        if not video or " vs. " not in heading:
+            continue
+        if not rest.casefold().startswith("highlights"):
+            continue
+        clips.append(
+            (
+                published,
+                Clip(
+                    heading=heading,
+                    subheading=rest,
+                    url=HA_YOUTUBE_URL.format(video=video),
+                    thumbnail=HA_YOUTUBE_THUMB.format(video=video),
+                    video_id=video,
+                ),
+            )
+        )
+    clips.sort(key=lambda item: item[0], reverse=True)
+    return clips
+
+
+def newer_from_feed(page: list[Clip], feed: list[tuple[str, Clip]]) -> list[Clip]:
+    """Return the feed's clips that are newer than anything on the page.
+
+    The page has no dates, but its clips are the channel's own videos, so the
+    newest of them that the feed still holds marks where the page has got to.
+    If the feed holds none of them, the page is further behind than the feed
+    reaches, and all of the feed is newer.
+    """
+    on_page = {clip.video_id for clip in page}
+    reached = max(
+        (published for published, clip in feed if clip.video_id in on_page),
+        default="",
+    )
+    return [
+        clip
+        for published, clip in feed
+        if clip.video_id not in on_page and published > reached
+    ]
+
+
+def _clip_sides(clip: Clip) -> list[str]:
+    """Return the two clubs a clip's "Home vs. Away" heading names."""
+    return [side.strip() for side in (clip.heading or "").split(" vs. ")]
 
 
 _HIGHLIGHT_CAROUSEL = re.compile(r'"title":"([^"]{1,60})","videoCards":(\[.*?\])')
