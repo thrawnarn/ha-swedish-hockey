@@ -29,6 +29,21 @@ league.
   two clubs stand, their form, their meetings this season and in earlier
   ones, how their seasons compare and who to watch.
 
+## Screenshots
+
+Leksand in Hockeyallsvenskan, with the leagues' own data.
+
+<img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/card.png" alt="The card: Leksand's next game" width="420">
+
+<img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/preview-desktop.png" alt="A game preview on a wide screen: the table, form, meetings" width="660">
+
+| | | |
+|:-:|:-:|:-:|
+| <img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/preview.png" alt="Game preview" width="250"> | <img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/team.png" alt="Leksand's page" width="250"> | <img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/recap.png" alt="A played game: score, highlights, match log" width="250"> |
+| Before a game | A club's page | After a game |
+| <img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/table.png" alt="The league table" width="250"> | <img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/stats.png" alt="League statistics" width="250"> | <img src="https://raw.githubusercontent.com/thrawnarn/ha-swedish-hockey/main/assets/screenshots/roster.png" alt="Leksand's squad in figures" width="250"> |
+| The table | Statistics | The squad in figures |
+
 > This is an unofficial integration. Neither league publishes an API; it reads
 > the same endpoints the leagues' own websites use, and it can break when they
 > change. It is not affiliated with SHL, Hockeyallsvenskan or Svenska
