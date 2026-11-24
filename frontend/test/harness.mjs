@@ -10,6 +10,16 @@
 // 17:00 UTC reads 19:00, wherever the tests run.
 process.env.TZ = "Europe/Stockholm";
 
+// The card writes Swedish through Intl. A Node built on a system ICU with only
+// English data (Alpine's icu-data-en) quietly answers in English instead, and
+// the failures then look like the card's own bugs.
+if (new Intl.RelativeTimeFormat("sv", { numeric: "auto" }).format(0, "day") !== "i dag") {
+  throw new Error(
+    "This Node has no Swedish locale data: install full ICU data (Alpine: " +
+      "apk add icu-data-full) or point ICU_DATA at a directory holding it.",
+  );
+}
+
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { NOW, REGISTRY, sensors, services } from "./fixture.mjs";
 

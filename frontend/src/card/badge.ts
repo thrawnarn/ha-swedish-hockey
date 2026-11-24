@@ -89,6 +89,7 @@ export class HockeyMatchBadge extends HockeyMatchCard {
     ctl.tableView = "table";
     if (ctl.state(ctl.ids.live)?.attributes?.in_progress === true) {
       ctl.panel = "game";
+      ctl.loadSquads();
     } else if (this.shownResult) {
       // Opened over the day the game was played, which is where its back
       // button leads - today, or yesterday for a late game read after

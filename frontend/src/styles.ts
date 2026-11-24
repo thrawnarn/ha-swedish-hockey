@@ -91,6 +91,19 @@ export const cardStyles = css`
       }
       ha-card { overflow: hidden; }
       .pad { padding: 16px; }
+      .unavailable { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+      .reload {
+        font: inherit;
+        padding: 6px 14px;
+        border: none;
+        border-radius: 18px;
+        cursor: pointer;
+        background: var(--primary-color);
+        color: var(--text-primary-color, #fff);
+      }
+      .reload[disabled] { opacity: 0.6; cursor: default; }
+      .reload:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+      .reload-error { color: var(--error-color, #e53935); font-size: 0.9em; }
       .title {
         display: flex;
         align-items: center;
@@ -427,16 +440,30 @@ export const cardStyles = css`
       }
       .dialog-nav .bar-badge {
         position: absolute;
-        top: 2px;
+        top: 0;
         left: calc(50% + 10px);
-        padding: 1px 5px;
-        font-size: 0.85em;
+        /* The label's own size, not a fraction of it: at 0.85 of the nav's
+           small type the count and LIVE were hard to read on a phone. */
+        min-width: 1.6em;
+        box-sizing: border-box;
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 1em;
+        font-weight: 600;
+        line-height: 1.2;
+        text-align: center;
         color: #fff;
         background: var(--error-color, #e53935);
       }
       @media (min-width: 601px) {
-        /* Wider by the rail, so the view keeps the width it had. */
-        dialog:not(.picker) { width: min(612px, calc(100vw - 32px)); }
+        /* Wider by the rail, so the view keeps the width it had. And one
+           height whatever is in it: sized to its content, the dialog grew and
+           shrank around the centre of the screen at every tab and every
+           answer, and the rail moved under the pointer with it. */
+        dialog:not(.picker) {
+          width: min(612px, calc(100vw - 32px));
+          height: min(78vh, 720px);
+        }
         dialog:not(.picker)[open] { flex-direction: row; }
         .dialog-nav {
           order: -1;
@@ -1431,7 +1458,18 @@ export const cardStyles = css`
         outline-offset: -2px;
       }
       .fixture-row.next { box-shadow: inset 3px 0 0 var(--primary-color); }
-      .team-tabs { padding-top: 12px; }
+      /* Five tabs since the news came: on a phone they may not all fit, so
+         they keep their width and the row scrolls. A row that scrolls may also
+         shrink in the panel's column, which cut the buttons in half; flex: none
+         holds it at its height. */
+      .team-tabs {
+        flex: none;
+        padding-top: 12px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .team-tabs::-webkit-scrollbar { display: none; }
+      .team-tabs button { flex: 1 0 auto; padding: 5px 8px; white-space: nowrap; }
       .recap-score { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .recap-figures { font-variant-numeric: tabular-nums; }
       .recap-score .fixture-logo { width: 22px; height: 22px; }
@@ -2334,6 +2372,45 @@ export const cardStyles = css`
         background: var(--primary-text-color);
         opacity: 0.55;
       }
+      /* A club's news: the headline, then the paper and when. */
+      .news-row {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 9px 0;
+        border-top: 1px solid var(--divider-color);
+        color: var(--primary-text-color);
+        text-decoration: none;
+      }
+      .news-row:first-of-type { border-top: none; }
+      .news-row:hover .news-title { text-decoration: underline; }
+      .news-title { font-size: 0.92em; font-weight: 500; line-height: 1.3; }
+      .news-meta { font-size: 0.78em; color: var(--secondary-text-color); }
+      /* The squad by position: count, height, weight and age. */
+      .sq-table {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) repeat(4, 3.6em);
+        column-gap: 6px;
+        padding: 6px 0 10px;
+        border-top: 1px solid var(--divider-color);
+        font-size: 0.86em;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .sq-table > span { padding: 3px 0; }
+      .sq-head {
+        font-size: 0.84em;
+        letter-spacing: 0.04em;
+        color: var(--secondary-text-color);
+      }
+      .sq-label { text-align: left; }
+      .sq-end {
+        display: inline-block;
+        min-width: 4.4em;
+        color: var(--secondary-text-color);
+      }
+      .ts-board-title.sq-subtitle { padding-top: 8px; }
+      .sq-unknown { color: var(--secondary-text-color); }
       .ts-leaders {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));

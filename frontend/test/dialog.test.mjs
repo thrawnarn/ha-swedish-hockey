@@ -197,3 +197,15 @@ test("a finished game in the day's list says so, and one being played or to come
   assert.ok(rows[1].querySelector(".fixture-live"));
   unmount(card);
 });
+
+test("the game being played and a played one compare the two squads too", async () => {
+  const hass = hassWith({ states: sensors({ live: liveSensor() }) });
+  const card = await mount(CARD_CONFIG, hass);
+  await tap(card, ".footer-bar .bar-button", "Tabell");
+  await tap(card, ".dialog-nav .bar-button", "Match");
+  assert.equal(callsTo(hass, "get_squads").length, 1);
+  const labels = (view) => $$(card, `${view} .stat-label`).map(text);
+  assert.ok(labels("hockey-game-view").includes("Snittlängd"), labels("hockey-game-view"));
+  assert.ok($$(card, "hockey-game-view .team-section").map(text).includes("Trupperna"));
+  unmount(card);
+});

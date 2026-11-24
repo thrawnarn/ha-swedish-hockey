@@ -76,7 +76,12 @@ export const positionOf = (player: Row): Position =>
   POSITIONS[String(player.position_code ?? "").toUpperCase()] ??
   (player.role === "goalkeeper" ? POSITIONS.GK : { letter: "", group: "other" });
 
-const RECAP_ICON: Record<string, string> = { goal: "🚨", penalty: "🟨" };
+const RECAP_ICON: Record<string, string> = {
+  goal: "🚨",
+  penalty: "🟨",
+  goalie_in: "🧤",
+  goalie_out: "🚪",
+};
 
 // A shootout attempt is worth telling apart at a glance: the same siren as any
 // other goal when it goes in, a plain cross when it does not.

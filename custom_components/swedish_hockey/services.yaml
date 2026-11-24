@@ -138,6 +138,19 @@ get_roster:
       selector:
         text:
 
+get_squads:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: false
+      example: LIF
+      selector:
+        text:
+
 get_form_table:
   fields:
     config_entry_id:
@@ -299,4 +312,25 @@ get_head_to_head:
         number:
           min: 1
           max: 15
+          mode: box
+
+get_news:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: swedish_hockey
+    team:
+      required: true
+      example: LIF
+      selector:
+        text:
+    limit:
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
           mode: box

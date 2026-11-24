@@ -123,6 +123,23 @@ class GameSheet:
     period_scores: tuple[str, ...] = ()
     url: str | None = None
 
+    @property
+    def score(self) -> tuple[int, int] | None:
+        """Return the score, home first, added up from the periods.
+
+        The sheet is where the final score is right when the league's own
+        record is not: Västerås-Leksand 2026-11-13 was won 0-1 in overtime,
+        and the league published it finished at 0-0 and kept it that way.
+        """
+        home = away = 0
+        for period in self.period_scores:
+            parts = period.split("-")
+            if len(parts) != 2 or not all(part.isdigit() for part in parts):
+                return None
+            home += int(parts[0])
+            away += int(parts[1])
+        return (home, away) if self.period_scores else None
+
     def as_dict(self) -> dict[str, Any]:
         """Return the sheet as a plain dict."""
         return {

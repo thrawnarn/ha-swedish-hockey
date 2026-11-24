@@ -12,6 +12,7 @@ import { dayTitle } from "../time";
 import type { Row } from "../types";
 import { loading } from "../parts/loading";
 import { scoreboard } from "../parts/scoreboard";
+import { squadCompare } from "../parts/squads";
 import { statBars } from "../parts/stat-bars";
 import { timeline } from "../parts/timeline";
 
@@ -108,6 +109,7 @@ export class HockeyRecapView extends PartElement {
                 </div>`
               : nothing}${timeline(ctx, events)}`
         : html`<div class="recap-note">Inget i protokollet.</div>`}
+      ${squadCompare(ctx, game.home_code, game.away_code)}
     `;
   }
 }

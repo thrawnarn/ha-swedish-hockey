@@ -105,3 +105,24 @@ test("while the statistics are read the leaders' shape is shown", async () => {
   assert.ok(loader.querySelector(".sk-card"));
   unmount(card);
 });
+
+test("the clubs' table sorts on their squads too", async () => {
+  const hass = hassWith();
+  const card = await stats(hass);
+  assert.equal(callsTo(hass, "get_squads").length, 1);
+  await tap(card, "hockey-stats-view .st-sections button", "Lag");
+  const chips = $$(card, "hockey-stats-view .st-groups .filter-chip").map(text);
+  assert.ok(["Trupp", "Backar", "Forwards", "Målvakter"].every((c) => chips.includes(c)), chips);
+  await tap(card, "hockey-stats-view .st-groups .filter-chip", "Trupp");
+  const names = () => $$(card, "hockey-stats-view .st-row:not(.head) .st-name").map(text);
+  const head = () => $$(card, "hockey-stats-view .st-row.head .roster-sort").map(text);
+  assert.deepEqual(head().map((h) => h.replace(/[▲▼]/, "")), ["Längd", "Vikt", "Ålder", "Sve%", "V%"]);
+  // The fixture's first club is the tallest and the youngest.
+  assert.match(names()[0], new RegExp(CLUBS[0].name));
+  assert.match(text($(card, "hockey-stats-view .st-row:not(.head) .sorted")), /^185,0$/);
+  await tap(card, "hockey-stats-view .st-row.head .roster-sort", "Ålder");
+  assert.match(names()[0], new RegExp(CLUBS.at(-1).name), "the oldest first");
+  await tap(card, "hockey-stats-view .st-row.head .roster-sort", "Ålder");
+  assert.match(names()[0], new RegExp(CLUBS[0].name), "and turned round, the youngest");
+  unmount(card);
+});

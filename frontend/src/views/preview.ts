@@ -31,6 +31,7 @@ import { playerLink } from "../parts/links";
 import { loading } from "../parts/loading";
 import { oddsBlock } from "../parts/odds";
 import { scoreboard } from "../parts/scoreboard";
+import { squadCompare } from "../parts/squads";
 
 // The figures that say most about how a club plays, in the order a reader
 // would weigh them.
@@ -65,7 +66,7 @@ export class HockeyPreviewView extends PartElement {
       ${error && !data ? html`<div class="recap-note">${error}</div>` : nothing}
       ${data
         ? html`${this.standing(data)} ${this.form(data)} ${this.meetings(data)} ${this.season(data)}
-          ${this.players(data)}`
+          ${squadCompare(ctx, data.game?.home_code, data.game?.away_code)} ${this.players(data)}`
         : nothing}
     `;
   }

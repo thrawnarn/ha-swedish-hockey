@@ -54,6 +54,13 @@ pure modules), never the served file.
   promises.
 - To test a loader or a late reply, answer a service with `deferred().promise`
   and resolve it when the test chooses.
+- **Swedish locale data.** The card's day names and "i dag" come from
+  `Intl`. A Node on a system ICU with English data only (Alpine's
+  `icu-data-en`) answers in English; the harness stops with a message saying
+  so. Install full ICU data or set `ICU_DATA` to a directory holding it.
+- A test that fails before `unmount(card)` leaves the dialog's timers running
+  (today's scores refresh every minute), so the file never exits and
+  `npm test` looks hung. Fix the failure; `--test-force-exit` shows the rest.
 - `textContent` of a filter chip includes its hidden `<option>`s; read the
   chip's `span`.
 

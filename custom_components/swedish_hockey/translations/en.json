@@ -244,6 +244,20 @@
         }
       }
     },
+    "get_squads": {
+      "name": "Get squads",
+      "description": "Return the clubs' squads in figures - average height, weight and age, overall and by position, which way they shoot and where they come from - each placed against the rest of the league.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF. Left out, every club."
+        }
+      }
+    },
     "get_form_table": {
       "name": "Get form table",
       "description": "Return the table over each club's last few games.",
@@ -361,6 +375,24 @@
         "seasons": {
           "name": "Seasons",
           "description": "How many finished seasons to look back over."
+        }
+      }
+    },
+    "get_news": {
+      "name": "Get news",
+      "description": "Return the latest news about a team - from the club's own site and the papers, via Google News - newest first.",
+      "fields": {
+        "config_entry_id": {
+          "name": "League",
+          "description": "Which league the team plays in."
+        },
+        "team": {
+          "name": "Team",
+          "description": "Team code or name, for example LIF or Leksands IF."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "How many articles to return."
         }
       }
     }

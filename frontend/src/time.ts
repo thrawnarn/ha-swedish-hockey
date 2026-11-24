@@ -56,3 +56,21 @@ export function dayTitle(date: Date, offset: number, locale: string | undefined)
   const text = date.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** When a piece of news came out: "Idag 14:05", "Igår 20:34", else the
+ *  date, "18 okt" - a reader wants the latest at a glance, not the clock of
+ *  something a week old. */
+export function newsWhen(
+  value: unknown,
+  locale: string | undefined,
+  time: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" },
+): string {
+  const date = new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) return "";
+  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((midnight(date) - midnight(new Date())) / 86400000);
+  const clock = date.toLocaleTimeString(locale, time);
+  if (days === 0) return `Idag ${clock}`;
+  if (days === -1) return `Igår ${clock}`;
+  return date.toLocaleDateString(locale, { day: "numeric", month: "short" });
+}

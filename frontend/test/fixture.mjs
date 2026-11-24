@@ -283,6 +283,40 @@ export function roster() {
   };
 }
 
+/** Every club's squad in figures, ours the tallest and the youngest. */
+export function squads() {
+  const club = (c, i) => ({
+    team_code: c.code,
+    team: c.name,
+    players: 25,
+    height: 185 - i * 0.5,
+    weight: 84 + (i % 3),
+    age: 24 + i * 0.4,
+    ranks: { height: i + 1, weight: (i % 3) + 1, age: CLUBS.length - i },
+    positions: {
+      gk: { players: 2, height: 188, weight: 86, age: 27.5 },
+      d: { players: 8, height: 186.1, weight: 87.2, age: 25.4 },
+      f: { players: 15, height: 183.4, weight: 83, age: 23.9 },
+    },
+    shoots: { left: 18, right: 5 },
+    home_grown: 21,
+    countries: [
+      { country: "SE", name: "Sverige", players: 21 },
+      { country: "FI", name: "Finland", players: 4 },
+    ],
+    tallest: { player: "Bo Ek", value: 197 },
+    shortest: { player: "Ada Berg", value: 171 },
+    heaviest: { player: "Bo Ek", value: 99 },
+    lightest: { player: "Ada Berg", value: 70 },
+    oldest: { player: "Gun Hed", value: 34.2 },
+    youngest: { player: "Ada Berg", value: 18.7 },
+  });
+  return {
+    teams: CLUBS.map(club),
+    league: { players: 25 * CLUBS.length, height: 183, weight: 85, age: 26, positions: {}, clubs: CLUBS.length },
+  };
+}
+
 export function recap(game = lastGame()) {
   return {
     game: { ...resultOf(game), attendance: 4321 },
@@ -394,6 +428,13 @@ export function services() {
     get_live: () => ({ games: GAMES.slice(NEXT_INDEX, NEXT_INDEX + 2) }),
     get_form_table: () => ({ table: TABLE.slice().reverse().map((r, i) => ({ ...r, rank: i + 1 })) }),
     get_roster: () => roster(),
+    get_squads: () => squads(),
+    get_news: () => ({
+      news: [
+        { title: "Ny tränare klar", source: "Kvällsbladet", url: "https://news.example/2", published: "2026-10-05T08:00:00Z" },
+        { title: "Förlust mot Bstad", source: "Aby IF", url: "https://news.example/1", published: "2026-09-28T19:40:00Z" },
+      ],
+    }),
     get_recap: () => recap(),
     get_player: (data) => player(data.player),
     get_matchup: (data) => matchup(data.game_id),

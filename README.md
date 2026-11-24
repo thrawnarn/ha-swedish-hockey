@@ -21,7 +21,8 @@ league.
   need to poll a sensor.
 - **Services** that answer with the league's data: the table, a team's
   schedule and results, a game's summary, a player's season, a squad, the
-  league's statistics.
+  league's statistics, the clubs' squads in figures and the latest news about
+  a club.
 - **A card and a badge.** Live score or next game on the face; behind it a
   dialog with today's games, the table, the schedule, statistics, each club's
   page, each player's, and a preview of every game still to come: where the
@@ -158,6 +159,8 @@ opened betting on them.
 | `get_form_table` | The table over each club's last few games |
 | `get_player` | A player's season |
 | `get_roster` | Everyone who has played for a team this season |
+| `get_squads` | The clubs' squads in figures - average height, weight and age, overall and by position, which way they shoot, where they come from - each against the rest of the league (`team` optional) |
+| `get_news` | The latest news about a team, from the club's own site and the papers, newest first (`limit`, default 20) |
 | `get_statistics` | The league's skater, goalkeeper and club statistics |
 | `get_matchup` | Two clubs before a game (by `game_id`, or `team` and `opponent` for their next meeting): table rows, form overall, at home and away, records, runs, rest and this season's meetings |
 | `get_head_to_head` | Two clubs' meetings in earlier seasons (`seasons`, default 5), in either league, from the federation's archive |
@@ -186,6 +189,8 @@ and then edit that message rather than send a second one.
 | `stats.swehockey.se` | The federation's game sheets: period scores, saves, power play time |
 | `stats.swehockey.se` archive | Earlier seasons of both leagues, for meetings between two clubs; each finished season is read once and kept |
 | `tv.nu` | Which channel shows a game (neither league says) |
+| Hockeyallsvenskan's YouTube channel | Highlight clips, as soon as they are up (the league's own page lags) |
+| Google News (RSS) | News about a club: its own site and the papers |
 | Svenska Spel (Kambi's offering API) | Odds on regular time for the next round; read at most every ten minutes, and only while a game is near |
 
 ## Development

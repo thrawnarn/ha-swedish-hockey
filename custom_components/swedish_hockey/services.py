@@ -38,6 +38,7 @@ from .api import (
     Standing,
     Team,
     club_key,
+    goalie_moves,
     match_team,
     parse_score,
     season_year,
@@ -58,6 +59,8 @@ from .const import (
     LIVE_WINDOW_BEFORE,
 )
 from .matchup import head_to_head, meetings, team_summary
+from .news import NewsReader, feed_reader
+from .squad import squad_figures
 from .stats import game_stats
 from .coordinator import (
     SwedishHockeyConfigEntry,
@@ -79,6 +82,8 @@ SERVICE_GET_RECAP = "get_recap"
 SERVICE_GET_SCHEDULE = "get_schedule"
 SERVICE_GET_PLAYER = "get_player"
 SERVICE_GET_ROSTER = "get_roster"
+SERVICE_GET_SQUADS = "get_squads"
+SERVICE_GET_NEWS = "get_news"
 SERVICE_GET_FORM_TABLE = "get_form_table"
 SERVICE_GET_LIVE = "get_live"
 SERVICE_GET_RESULTS = "get_results"
@@ -137,6 +142,11 @@ _GOAL_REFERENCE_SCHEMA = _TEAM_SCHEMA.extend(
     }
 )
 _PLAYER_SCHEMA = _TEAM_SCHEMA.extend({vol.Required(ATTR_PLAYER): cv.string})
+# Every club unless one is named; either way each is placed against the rest.
+_SQUADS_SCHEMA = _ENTRY_SCHEMA.extend({vol.Optional(ATTR_TEAM): cv.string})
+_NEWS_SCHEMA = _TEAM_SCHEMA.extend(
+    {vol.Optional(ATTR_LIMIT, default=20): vol.All(int, vol.Range(min=1, max=100))}
+)
 _FORM_TABLE_SCHEMA = _ENTRY_SCHEMA.extend(
     {
         vol.Optional(ATTR_LAST, default=5): vol.All(int, vol.Range(min=1, max=82)),
@@ -195,6 +205,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
         (SERVICE_GET_SCHEDULE, _SCHEDULE_SCHEMA, _async_get_schedule),
         (SERVICE_GET_PLAYER, _PLAYER_SCHEMA, _async_get_player),
         (SERVICE_GET_ROSTER, _TEAM_SCHEMA, _async_get_roster),
+        (SERVICE_GET_SQUADS, _SQUADS_SCHEMA, _async_get_squads),
+        (SERVICE_GET_NEWS, _NEWS_SCHEMA, _async_get_news),
         (SERVICE_GET_FORM_TABLE, _FORM_TABLE_SCHEMA, _async_get_form_table),
         (SERVICE_GET_LIVE, _LIVE_SCHEMA, _async_get_live),
         (SERVICE_GET_RESULTS, _RESULTS_SCHEMA, _async_get_results),
@@ -886,8 +898,9 @@ async def _async_get_head_to_head(call: ServiceCall) -> ServiceResponse:
     }
 
 
-# Goals, penalties and shootout attempts, in the order they happened.
-_TIMELINE_KINDS = ("goal", "penalty", "penalty_shot")
+# Goals, penalties, shootout attempts and the goalkeepers coming and going,
+# in the order they happened.
+_TIMELINE_KINDS = ("goal", "penalty", "penalty_shot", "goalie_in", "goalie_out")
 
 # Hockeyallsvenskan names the periods after the third - "OT", then "SO" or
 # "PSO" - where SHL numbers them 4 and 5. Named or numbered, they follow the
@@ -933,9 +946,10 @@ def _timeline(events: list[Any], team: Team) -> list[dict[str, Any]]:
         if event.kind in _TIMELINE_KINDS
         and not (event.kind == "goal" and event.period in shootout_periods)
     ]
+    ordered = [event for _, event in sorted(wanted, key=order)]
     return [
         dict(event.as_dict(), ours=_is_ours(event, team))
-        for _, event in sorted(wanted, key=order)
+        for event in goalie_moves(ordered, _period_rank)
     ]
 
 
@@ -1150,6 +1164,60 @@ async def _async_get_roster(call: ServiceCall) -> ServiceResponse:
         "season": season_year(),
         "stats_url": entry.runtime_data.client.players_url,
         "players": players,
+    }
+
+
+async def _async_get_squads(call: ServiceCall) -> ServiceResponse:
+    """Return the clubs' squads in figures: height, weight, age, shot, country.
+
+    Taken over everyone registered with a club, not only those who have
+    played, and each club placed against the rest of the league.
+    """
+    entry = _entry(call)
+    team = _team(entry, call) if call.data.get(ATTR_TEAM) else None
+    data = entry.runtime_data.data
+    teams = data.teams if data else {}
+    try:
+        profiles = await entry.runtime_data.client.async_squad_profiles()
+    except NotImplementedError as err:
+        raise ServiceValidationError(f"{entry.title} publishes no squads") from err
+    except HockeyApiError as err:
+        raise ServiceValidationError(str(err)) from err
+
+    def _find(*spellings: Any) -> Team | None:
+        for spelling in spellings:
+            if spelling and (found := match_team(teams, str(spelling))):
+                return found
+        return None
+
+    result = squad_figures(profiles, _find, dt_util.now().date())
+    if team is not None:
+        result["teams"] = [
+            row for row in result["teams"] if row["team_code"] == team.key
+        ]
+    return {"season": season_year(), **result}
+
+
+def _news(hass: HomeAssistant) -> NewsReader:
+    """Return the news reader, shared by every league entry."""
+    shared = hass.data.setdefault(DOMAIN, {})
+    if (reader := shared.get("news")) is None:
+        reader = shared["news"] = NewsReader(feed_reader(async_get_clientsession(hass)))
+    return reader
+
+
+async def _async_get_news(call: ServiceCall) -> ServiceResponse:
+    """Return the latest news about a club, from its own site and the papers."""
+    entry = _entry(call)
+    team = _team(entry, call)
+    try:
+        items = await _news(call.hass).async_news(team)
+    except HockeyApiError as err:
+        raise ServiceValidationError(str(err)) from err
+    return {
+        "team": team.name,
+        "team_code": team.key,
+        "news": items[: call.data[ATTR_LIMIT]],
     }
 
 

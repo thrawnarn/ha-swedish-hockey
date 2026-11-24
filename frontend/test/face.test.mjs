@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { $, $$, CARD_CONFIG, hassWith, mount, tap, text, unmount } from "./harness.mjs";
-import { liveSensor, OURS, ourGames, resultOf, sensors } from "./fixture.mjs";
+import { liveSensor, OURS, ourGames, REGISTRY, resultOf, sensors } from "./fixture.mjs";
 
 test("between games the card shows the next fixture", async () => {
   const card = await mount();
@@ -60,6 +60,39 @@ test("settings switch parts of the face off", async () => {
   assert.equal($(card, ".pp"), null);
   assert.equal($(card, ".shots"), null);
   assert.equal(text($(card, ".period")), "Period 2");
+  unmount(card);
+});
+
+test("an unavailable next game offers to reload the integration", async () => {
+  // Unavailable, the sensor has no attributes to be recognised by; the
+  // registry's translation key still says what it is.
+  const states = { ...sensors(), "sensor.norrby_next": { state: "unavailable", attributes: {} } };
+  const entities = {
+    ...REGISTRY.entities,
+    "sensor.norrby_next": { ...REGISTRY.entities["sensor.norrby_next"], translation_key: "next_game" },
+  };
+  const hass = hassWith({ states, entities });
+  const card = await mount(CARD_CONFIG, hass);
+  assert.match(text($(card, "ha-card")), /Nästa match är inte tillgänglig/);
+  await tap(card, ".reload");
+  assert.deepEqual(
+    hass.calls.filter((c) => c.service === "reload_config_entry").map((c) => [c.domain, c.data]),
+    [["homeassistant", { entry_id: "entry-1" }]],
+  );
+  assert.equal($(card, ".reload-error"), null);
+  unmount(card);
+});
+
+test("a refused reload says why", async () => {
+  const states = { ...sensors(), "sensor.norrby_next": { state: "unavailable", attributes: {} } };
+  const hass = hassWith({
+    states,
+    answers: { reload_config_entry: () => Promise.reject(new Error("Unauthorized")) },
+  });
+  const card = await mount({ ...CARD_CONFIG, next_entity: "sensor.norrby_next" }, hass);
+  await tap(card, ".reload");
+  assert.equal(text($(card, ".reload-error")), "Unauthorized");
+  assert.equal($(card, ".reload").disabled, false);
   unmount(card);
 });
 

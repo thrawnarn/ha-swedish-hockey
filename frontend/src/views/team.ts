@@ -15,7 +15,33 @@ import { fixtureRow } from "../parts/fixture";
 import { playerLink } from "../parts/links";
 import { loading } from "../parts/loading";
 import { placeClass, statsWho } from "../parts/stats";
+import { newsWhen, timeFormat } from "../time";
 import { scrollToNext } from "./scroll";
+
+// A squad's figures, each read the way it is said: "184,4 cm".
+const SQUAD_FIGURES: [key: string, label: string, unit: string][] = [
+  ["height", "Snittlängd", "cm"],
+  ["weight", "Snittvikt", "kg"],
+  ["age", "Snittålder", "år"],
+];
+const SQUAD_GROUPS: [key: string, label: string][] = [
+  ["gk", "Målvakter"],
+  ["d", "Backar"],
+  ["f", "Forwards"],
+];
+const SQUAD_ENDS: [key: string, label: string, unit: string][] = [
+  ["tallest", "Längst", "cm"],
+  ["shortest", "Kortast", "cm"],
+  ["heaviest", "Tyngst", "kg"],
+  ["lightest", "Lättast", "kg"],
+  ["oldest", "Äldst", "år"],
+  ["youngest", "Yngst", "år"],
+];
+
+const decimal = (value: unknown, digits = 1) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? value.toFixed(digits).replace(".", ",")
+    : "–";
 
 interface Group {
   id: string;
@@ -95,6 +121,7 @@ export class HockeyTeamView extends PartElement {
             ["schedule", "Spelschema"],
             ["roster", "Trupp"],
             config.show_stats !== false && ["stats", "Statistik"],
+            ["news", "Nyheter"],
           ].filter(Boolean) as [string, string][]
         ).map(
           ([id, label]) => html`
@@ -114,6 +141,7 @@ export class HockeyTeamView extends PartElement {
       ${tab === "schedule" ? this.schedule(team) : nothing}
       ${tab === "roster" ? this.roster(team) : nothing}
       ${tab === "stats" ? this.stats(team) : nothing}
+      ${tab === "news" ? this.news(team) : nothing}
     `;
   }
 
@@ -155,9 +183,43 @@ export class HockeyTeamView extends PartElement {
     ];
   }
 
+  // ---- News -------------------------------------------------------------------
+
+  // What the club's own site and the papers have written, newest first. Each
+  // opens where it was published; the integration only knows the headline.
+  private news(team: Row) {
+    const { locale, hass } = this.ctx;
+    const { news, newsLoading, newsError } = team;
+    if (newsLoading) return loading("Hämtar nyheterna…", "table");
+    if (newsError) return html`<div class="recap-note">${newsError}</div>`;
+    if (!news?.length) return html`<div class="recap-note">Inga nyheter den senaste månaden.</div>`;
+    return html`
+      ${news.map(
+        (item: Row) => html`
+          <a class="news-row" href=${item.url} target="_blank" rel="noopener noreferrer">
+            <span class="news-title">${item.title}</span>
+            <span class="news-meta"
+              >${[item.source, newsWhen(item.published, locale, timeFormat(hass))]
+                .filter(Boolean)
+                .join(" · ")}</span
+            >
+          </a>
+        `,
+      )}
+      <div class="pv-source">Från klubbens sajt och tidningarna, via Google News</div>
+    `;
+  }
+
   // ---- The squad --------------------------------------------------------------
 
+  // The squad in figures goes above the list, and stays when the list is
+  // not to be had: the SHL publishes no player statistics, but its squads
+  // can still be measured.
   private roster(team: Row) {
+    return html`${this.squad(team.row?.team_code)}${this.rosterList(team)}`;
+  }
+
+  private rosterList(team: Row) {
     const { ctl } = this.ctx;
     const { row, roster, rosterLoading, rosterError } = team;
     if (rosterLoading) return loading("Hämtar truppen…", "table");
@@ -190,6 +252,131 @@ export class HockeyTeamView extends PartElement {
         </button>
       </div>
       ${groups.map((group) => this.rosterTable(team, group, row.team_code))}
+    `;
+  }
+
+  // ---- The squad in figures ------------------------------------------------------
+
+  // Height, weight and age against the other clubs: a place, and a bar from
+  // the league's lowest to its highest with the league's average marked.
+  // First is the tallest, heaviest or oldest, which is neither good nor bad,
+  // so the places are not coloured as the statistics' are.
+  private squad(code: string | undefined) {
+    const { data, loading: busy } = this.ctx.ctl.squads ?? {};
+    if (!data) return busy ? loading("Mäter truppen…", "table") : nothing;
+    const teams: Row[] = data.teams ?? [];
+    const ours = teams.find((t) => clubKey(t.team_code) === clubKey(code));
+    if (!ours?.players) return nothing;
+    const league: Row = data.league ?? {};
+    const colour = this.ctx.ctl.clubColourOf(code);
+    const { left = 0, right = 0 } = ours.shoots ?? {};
+    const unknown = ours.players - left - right;
+    return html`
+      <div class="team-section">Truppen i siffror</div>
+      ${SQUAD_FIGURES.map(([key, label, unit]) =>
+        this.squadRow(teams, ours, league, key, label, unit, colour),
+      )}
+      <div class="sq-table">
+        <span class="sq-head"></span>
+        <span class="sq-head">Antal</span>
+        ${SQUAD_FIGURES.map(([, , unit]) => html`<span class="sq-head">${unit}</span>`)}
+        ${SQUAD_GROUPS.map(([key, label]) => {
+          const group = ours.positions?.[key];
+          if (!group?.players) return nothing;
+          const theirs = league.positions?.[key] ?? {};
+          return html`
+            <span class="sq-label">${label}</span>
+            <span>${group.players}</span>
+            ${SQUAD_FIGURES.map(
+              ([figure, name, unit]) =>
+                html`<span title=${`${name} i serien: ${decimal(theirs[figure])} ${unit}`}
+                  >${decimal(group[figure])}</span
+                >`,
+            )}
+          `;
+        })}
+      </div>
+      <div class="ts-leaders">
+        <div class="ts-board">
+          <span class="ts-board-title">Ytterligheter</span>
+          ${SQUAD_ENDS.map(([key, label, unit]) => {
+            const end = ours[key];
+            if (!end?.player) return nothing;
+            return html`
+              <span class="ts-board-row">
+                <span class="lb-name"
+                  ><span class="sq-end">${label}</span> ${playerLink(
+                    this.ctx,
+                    end.player,
+                    ours.team_code,
+                  )}</span
+                >
+                <span class="lb-value"
+                  >${unit === "år" ? decimal(end.value) : end.value} ${unit}</span
+                >
+              </span>
+            `;
+          })}
+        </div>
+        <div class="ts-board">
+          <span class="ts-board-title">Ursprung</span>
+          ${(ours.countries ?? []).map(
+            (country: Row) => html`
+              <span class="ts-board-row">
+                <span class="lb-name">${country.name ?? country.country}</span>
+                <span class="lb-value">${country.players}</span>
+              </span>
+            `,
+          )}
+          <span class="ts-board-title sq-subtitle">Fattning</span>
+          <span class="ts-board-row">
+            <span class="lb-name">Vänster</span><span class="lb-value">${left}</span>
+          </span>
+          <span class="ts-board-row">
+            <span class="lb-name">Höger</span><span class="lb-value">${right}</span>
+          </span>
+          ${unknown > 0
+            ? html`<span class="ts-board-row sq-unknown">
+                <span class="lb-name">Okänd</span><span class="lb-value">${unknown}</span>
+              </span>`
+            : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private squadRow(
+    teams: Row[],
+    ours: Row,
+    league: Row,
+    key: string,
+    label: string,
+    unit: string,
+    colour: string,
+  ) {
+    const value = ours[key];
+    if (typeof value !== "number") return nothing;
+    const values = teams.map((t) => t[key]).filter((v): v is number => typeof v === "number");
+    const low = Math.min(...values);
+    const span = Math.max(...values) - low;
+    const along = (v: number) => (span ? Math.min(1, Math.max(0, (v - low) / span)) : 1);
+    const mean = typeof league[key] === "number" ? league[key] : null;
+    const place = ours.ranks?.[key];
+    return html`
+      <div class="ts-row" title=${`Serien: ${decimal(mean)} ${unit}`}>
+        <span class="ts-label">${label}</span>
+        <span class="ts-value">${decimal(value)} ${unit}</span>
+        <span class="st-place">${place ? ordinal(place) : ""}</span>
+        <span class="ts-track">
+          <span
+            class="ts-fill"
+            style=${`width: ${(along(value) * 100).toFixed(1)}%; background: ${colour}`}
+          ></span>
+          ${mean !== null
+            ? html`<span class="ts-mean" style=${`left: ${(along(mean) * 100).toFixed(1)}%`}></span>`
+            : nothing}
+        </span>
+      </div>
     `;
   }
 

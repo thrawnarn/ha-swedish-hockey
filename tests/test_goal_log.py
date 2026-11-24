@@ -62,6 +62,9 @@ def live_coordinator():
     live.push = None
     live.data = None
     live._announce_on_start = False
+    live.sheet = None
+    live._sheet_game_uid = "g1"
+    live._data_game_uid = None
     return live
 
 
@@ -204,6 +207,79 @@ check(
     "the look again after the reference wait is a callback method, not a lambda",
     _rig.calls_later and getattr(_rig.calls_later[-1][1], "__name__", "") == "_async_look_again",
     _rig.calls_later,
+)
+
+# A game the league publishes finished at 0-0 although it was won in overtime
+# (Västerås-Leksand 2026-11-13 went out as a loss): the end waits for the
+# federation's sheet, and goes out with its score.
+swehockey = load("swehockey")
+
+
+def sheet(*periods):
+    side = swehockey.SideSheet()
+    return swehockey.GameSheet(game_id="1", home=side, away=side, period_scores=periods)
+
+
+def ends(live):
+    return [data for event, data in live.hass.bus.fired if event == coordinator.EVENT_GAME_END]
+
+
+level = LiveGame(finished=True, decided_in="OT", goals=[])
+live = live_coordinator()
+live._goal_log["g1"] = {"goals": [], "ended": False, "details": {}}
+live._data_game_uid = "g1"
+announce(live, 0, level)
+check(
+    "a finished game with a level score is not announced as over",
+    not ends(live) and live._goal_log["g1"]["ended"] is False,
+    live.hass.bus.fired,
+)
+check("and the coordinator says it is waiting on the result", live.awaiting_result())
+live.sheet = sheet("0-0", "0-0", "0-0", "0-1")
+announce(live, 120, level)
+end = ends(live)
+check(
+    "once the sheet has the winning goal, the end goes out with the sheet's score",
+    len(end) == 1 and end[0]["score"] == "0-1" and end[0]["decided_in"] == "OT",
+    end,
+)
+check("and the away side that scored it won", end and end[0]["we_won"] is True, end)
+check("and nothing is waited on any more", not live.awaiting_result())
+announce(live, 180, level)
+check("the end goes out once", len(ends(live)) == 1, ends(live))
+
+live = live_coordinator()
+live._goal_log["g1"] = {"goals": [], "ended": False, "details": {}}
+live.sheet = sheet("1-0", "0-1", "0-0", "0-0", "1-0")
+announce(live, 0, level)
+end = ends(live)
+check(
+    "a fifth period on the sheet is a shootout, won here by the home side",
+    len(end) == 1 and end[0]["score"] == "2-1" and end[0]["decided_in"] == "SO"
+    and end[0]["we_won"] is False,
+    end,
+)
+
+live = live_coordinator()
+live._goal_log["g1"] = {"goals": [], "ended": False, "details": {}}
+announce(live, 0, level)
+announce(live, 29 * 60, level)
+check("nothing goes out while the wait lasts", not ends(live), ends(live))
+announce(live, 30 * 60, level)
+end = ends(live)
+check(
+    "after the wait the end goes out without a winner rather than not at all",
+    len(end) == 1 and end[0]["we_won"] is None and end[0]["score"] == "0-0",
+    end,
+)
+
+live = live_coordinator()
+live._goal_log["g1"] = {"goals": [], "ended": False, "details": {}}
+announce(live, 4 * 3600 - 60, level)
+check(
+    "the end goes out before the live window closes, however short the wait",
+    len(ends(live)) == 1,
+    ends(live),
 )
 
 check(

@@ -87,6 +87,7 @@ const STATE = [
   "day",
   "stats",
   "statsData",
+  "squads",
   "picker",
   "preview",
 ] as const;
@@ -109,6 +110,9 @@ export class HockeyController {
   declare day: number;
   declare stats: StatsUi | null;
   declare statsData: Record<string, StatsEntry> | null;
+  /** Every club's squad in figures, read once for the whole league: a club
+   *  is only worth measuring against the others. */
+  declare squads: StatsEntry | null;
   declare picker: string | null;
   /** A game ahead, being previewed: the game it was opened on, what has been
    *  read about it, and whether it went over a club's page or under one. */
@@ -318,6 +322,7 @@ export class HockeyController {
     this.preview = null;
     if (id === "game") {
       this.panel = "game";
+      this.loadSquads();
       return;
     }
     this.panel = "table";
@@ -572,6 +577,8 @@ export class HockeyController {
   // late answer is still the answer. A stale copy stays on show while the
   // fresh one is read.
   async loadStats(scope: string = this.statsScope()): Promise<void> {
+    // The clubs' table has the squads' figures among its columns.
+    this.loadSquads();
     const kept = this.statsData?.[scope];
     if (kept?.loading) return;
     if (kept?.data && Date.now() - (kept.at ?? 0) < STATS_FRESH) return;
@@ -589,6 +596,20 @@ export class HockeyController {
         loading: false,
         error: errorText(err),
       });
+    }
+  }
+
+  // Squads change between games, not during one; the SHL's take some
+  // seconds to read the first time, so they are kept as long as the stats.
+  async loadSquads(): Promise<void> {
+    const kept = this.squads;
+    if (kept?.loading) return;
+    if (kept?.data && Date.now() - (kept.at ?? 0) < STATS_FRESH) return;
+    this.squads = { ...(kept ?? {}), loading: true, error: null };
+    try {
+      this.squads = { data: await this.ask("get_squads"), at: Date.now() };
+    } catch (err) {
+      this.squads = { ...(this.squads ?? {}), loading: false, error: errorText(err) };
     }
   }
 
@@ -679,6 +700,18 @@ export class HockeyController {
       await this.loadTeamSeason(0);
     }
     if (tab === "stats") this.loadStats("season");
+    if (tab === "roster") this.loadSquads();
+    if (tab === "news" && !this.team?.news) {
+      this.team = { ...this.team, newsLoading: true };
+      try {
+        const data = await this.askTeam(code, "get_news", { limit: 40 });
+        if (this.stale(token)) return;
+        this.team = { ...this.team, newsLoading: false, news: data?.news ?? [] };
+      } catch (err) {
+        if (this.stale(token)) return;
+        this.team = { ...this.team, newsLoading: false, newsError: errorText(err) };
+      }
+    }
     if (tab === "roster" && !this.team?.roster) {
       this.team = { ...this.team, rosterLoading: true };
       try {
@@ -788,6 +821,7 @@ export class HockeyController {
       history: { loading: true },
     };
     if (this.config.show_stats !== false) this.loadStats("season");
+    this.loadSquads();
 
     this.ask("get_matchup", { game_id: game.game_id })
       .then((data) => {
@@ -834,6 +868,7 @@ export class HockeyController {
     if (!row?.game_id && !row?.latest) return;
     const token = this.newRequest();
     this.recap = { loading: true, row };
+    this.loadSquads();
     const ask = (details: boolean) =>
       this.ask("get_recap", {
         team: teamCode || this.teamRef(),

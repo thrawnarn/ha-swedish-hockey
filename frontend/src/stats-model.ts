@@ -3,8 +3,9 @@
  * rows is ranked on one figure.
  */
 
-import type { Metric, Ranked, Ranking, StatsRow } from "./types";
+import type { Metric, Ranked, Ranking, Row, StatsRow } from "./types";
 import { statNumber } from "./format";
+import { clubKey } from "./teams";
 
 // The league's statistics, as the Statistik tab reads them. Every figure the
 // service sends is named once here: what it is called in full, what heads its
@@ -83,7 +84,33 @@ export const TEAM_METRICS: Record<string, Metric> = {
   ATT_avg: { label: "Publiksnitt hemma", short: "Snitt", kind: "crowd" },
   ATT_total: { label: "Publik hemma totalt", short: "Totalt", kind: "crowd" },
   ATT_GP: { label: "Hemmamatcher", short: "M" },
+  // Who the players are, from the squads rather than the statistics tables
+  // (`withSquads`). First is the tallest, heaviest or oldest - neither better
+  // nor worse, but a list has to start somewhere.
+  sq_height: { label: "Snittlängd (cm)", short: "Längd", kind: "dec1" },
+  sq_weight: { label: "Snittvikt (kg)", short: "Vikt", kind: "dec1" },
+  sq_age: { label: "Snittålder (år)", short: "Ålder", kind: "dec1" },
+  sq_swedes: { label: "Andel svenska spelare", short: "Sve%", kind: "pct" },
+  sq_left: { label: "Andel vänsterfattade", short: "V%", kind: "pct" },
+  sq_players: { label: "Spelare i truppen", short: "Antal" },
+  ...squadPositionMetrics(),
 };
+
+// Height, weight and age for goalkeepers, backs and forwards on their own.
+function squadPositionMetrics(): Record<string, Metric> {
+  const metrics: Record<string, Metric> = {};
+  for (const [group, who] of [
+    ["gk", "målvakterna"],
+    ["d", "backarna"],
+    ["f", "forwards"],
+  ]) {
+    metrics[`sq_${group}_height`] = { label: `Snittlängd, ${who} (cm)`, short: "Längd", kind: "dec1" };
+    metrics[`sq_${group}_weight`] = { label: `Snittvikt, ${who} (kg)`, short: "Vikt", kind: "dec1" };
+    metrics[`sq_${group}_age`] = { label: `Snittålder, ${who} (år)`, short: "Ålder", kind: "dec1" };
+    metrics[`sq_${group}_players`] = { label: `Antal ${who}`, short: "Antal" };
+  }
+  return metrics;
+}
 
 export type StatsKind = "skaters" | "goalies" | "teams";
 
@@ -162,8 +189,62 @@ export const STATS_COLUMNS: Record<StatsKind, ColumnGroup[]> = {
       columns: ["FO_perc", "PIM_GP", "Hits", "BKS", "CF_perc"],
     },
     { id: "crowd", label: "Publik", sort: "ATT_avg", columns: ["ATT_avg", "ATT_total", "ATT_GP"] },
+    {
+      id: "squad",
+      label: "Trupp",
+      sort: "sq_height",
+      columns: ["sq_height", "sq_weight", "sq_age", "sq_swedes", "sq_left"],
+    },
+    ...(
+      [
+        ["d", "Backar"],
+        ["f", "Forwards"],
+        ["gk", "Målvakter"],
+      ] as const
+    ).map(([group, label]) => ({
+      id: `squad_${group}`,
+      label,
+      sort: `sq_${group}_height`,
+      columns: ["height", "weight", "age", "players"].map((k) => `sq_${group}_${k}`),
+    })),
   ],
 };
+
+// The clubs' rows with their squads' figures laid on, as `sq_` columns. Kept
+// against the rows and the squads they were made from, so the list a ranking
+// is cached against stays the same list from one render to the next.
+const WITH_SQUADS = new WeakMap<StatsRow[], { squads: Row; rows: StatsRow[] }>();
+
+export function withSquads(teams: StatsRow[] | undefined, squads: Row | null | undefined): StatsRow[] {
+  const rows = teams ?? [];
+  const clubs: Row[] = squads?.teams ?? [];
+  if (!clubs.length) return rows;
+  const kept = WITH_SQUADS.get(rows);
+  if (kept && kept.squads === squads) return kept.rows;
+  const share = (part: unknown, whole: number) =>
+    whole ? Math.round((1000 * Number(part ?? 0)) / whole) / 10 : null;
+  const merged = rows.map((row) => {
+    const club = clubs.find((c) => clubKey(c.team_code) === clubKey(row.team_code));
+    if (!club?.players) return row;
+    const { left = 0, right = 0 } = club.shoots ?? {};
+    const extra: StatsRow = {
+      sq_height: club.height,
+      sq_weight: club.weight,
+      sq_age: club.age,
+      sq_swedes: share(club.home_grown, club.players),
+      sq_left: share(left, left + right),
+      sq_players: club.players,
+    };
+    for (const [group, figures] of Object.entries((club.positions ?? {}) as Record<string, Row>)) {
+      for (const key of ["height", "weight", "age", "players"]) {
+        extra[`sq_${group}_${key}`] = figures?.[key] ?? null;
+      }
+    }
+    return { ...row, ...extra };
+  });
+  WITH_SQUADS.set(rows, { squads: squads as Row, rows: merged });
+  return merged;
+}
 
 // The leaders, a row of cards per kind. The first few of each are what the
 // league's own front page leads with; the rest are a swipe along.

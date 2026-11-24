@@ -18,6 +18,7 @@ import {
   STATS_SCOPES,
   STATS_SECTIONS,
   TEAM_METRICS,
+  withSquads,
   type StatsKind,
 } from "../stats-model";
 import { clubKey } from "../teams";
@@ -311,7 +312,8 @@ export class HockeyStatsView extends PartElement {
     const { ctx } = this;
     const { ctl } = ctx;
     const metrics = STATS_KINDS[kind].metrics;
-    const all: StatsRow[] = data?.[kind] ?? [];
+    const all: StatsRow[] =
+      kind === "teams" ? withSquads(data?.teams, ctl.squads?.data) : (data?.[kind] ?? []);
     const has = (key: string) => all.some((row) => row[key] !== undefined && row[key] !== null);
     // A league that does not publish a figure loses its column, and a group
     // with nothing left in it goes too.

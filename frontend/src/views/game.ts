@@ -12,6 +12,7 @@ import { clubKey } from "../teams";
 import type { Row } from "../types";
 import { tv } from "../parts/common";
 import { scoreboard } from "../parts/scoreboard";
+import { squadCompare } from "../parts/squads";
 import { statBars } from "../parts/stat-bars";
 import { timeline } from "../parts/timeline";
 
@@ -78,6 +79,7 @@ export class HockeyGameView extends PartElement {
       })}
       ${statBars(ctx, stats as Row[], a)}
       ${events.length ? timeline(ctx, events) : html`<div class="recap-note">Inget har hänt än.</div>`}
+      ${squadCompare(ctx, a.home_code, a.away_code)}
     `;
   }
 }

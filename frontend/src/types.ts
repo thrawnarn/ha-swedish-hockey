@@ -20,6 +20,7 @@ export interface HassEntity {
 export interface HassEntityRegistryEntry {
   device_id?: string | null;
   platform?: string;
+  translation_key?: string | null;
 }
 
 export interface HassDevice {

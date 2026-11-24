@@ -34,7 +34,52 @@ test("the squad sorts by points, and can be split by position", async () => {
   await tap(card, ".roster-row.head .roster-sort", "Spelare");
   assert.equal(names()[0], "Ada Berg");
   await tap(card, "hockey-team-view .switch button", "Per position");
-  assert.deepEqual($$(card, "hockey-team-view .team-section").map(text), ["Målvakter", "Backar", "Forwards"]);
+  assert.deepEqual($$(card, "hockey-team-view .team-section").map(text), [
+    "Truppen i siffror",
+    "Målvakter",
+    "Backar",
+    "Forwards",
+  ]);
+  unmount(card);
+});
+
+test("the squad in figures stands against the league", async () => {
+  const hass = hassWith();
+  const card = await teamPage(hass);
+  await tap(card, ".team-tabs button", "Trupp");
+  assert.equal(callsTo(hass, "get_squads").length, 1);
+  assert.deepEqual(callsTo(hass, "get_squads")[0].data, { config_entry_id: "entry-1" }, "the whole league, once");
+  const rows = $$(card, "hockey-team-view .ts-row");
+  assert.equal(rows.length, 3);
+  assert.match(text(rows[0]), /Snittlängd\s*185,0 cm\s*1:a/);
+  assert.match(text(rows[2]), /Snittålder\s*24,0 år/);
+  assert.equal(rows[0].getAttribute("title"), "Serien: 183,0 cm");
+  const table = text($(card, ".sq-table"));
+  assert.match(table, /Målvakter\s*2\s*188,0\s*86,0\s*27,5/);
+  const boards = $$(card, "hockey-team-view .ts-board").map(text);
+  assert.match(boards[0], /Längst\s*Bo Ek\s*197 cm/);
+  assert.match(boards[0], /Yngst\s*Ada Berg\s*18,7 år/);
+  assert.match(boards[1], /Sverige\s*21/);
+  assert.match(boards[1], /Okänd\s*2/, "the shots nobody wrote down are counted too");
+  // Back and in again: the figures are kept, not read a second time.
+  await tap(card, ".team-tabs button", "Översikt");
+  await tap(card, ".team-tabs button", "Trupp");
+  assert.equal(callsTo(hass, "get_squads").length, 1);
+  unmount(card);
+});
+
+test("the squad in figures stays when the list cannot be had", async () => {
+  const hass = hassWith({
+    answers: {
+      get_roster: () => {
+        throw new Error("SHL publishes no player statistics");
+      },
+    },
+  });
+  const card = await teamPage(hass);
+  await tap(card, ".team-tabs button", "Trupp");
+  assert.equal($$(card, "hockey-team-view .ts-row").length, 3);
+  assert.match(text($(card, "hockey-team-view .recap-note")), /no player statistics/);
   unmount(card);
 });
 
@@ -53,11 +98,15 @@ test("a played game opens its summary, and a scorer his page", async () => {
   await tap(card, "hockey-team-view .fixture-row.tappable");
   assert.ok(callsTo(hass, "get_recap")[0].data.game_id);
   assert.ok($(card, "hockey-recap-view .scoreboard.over"));
+  assert.ok(
+    $$(card, "hockey-recap-view .team-section").map(text).includes("Trupperna"),
+    "a played game compares the squads as well",
+  );
   // A crowd is written in groups of three, with a space that does not break.
   assert.match($(card, ".recap-meta").textContent, /4\u00a0321 åskådare/);
-  assert.equal($$(card, "hockey-recap-view .stat").length, 2, "the key figures first");
+  assert.equal($$(card, "hockey-recap-view .stats:not(.squads) .stat").length, 2, "the key figures first");
   await tap(card, ".stats-more");
-  assert.equal($$(card, "hockey-recap-view .stat").length, 3);
+  assert.equal($$(card, "hockey-recap-view .stats:not(.squads) .stat").length, 3);
   assert.match(text($(card, ".recap-back")), new RegExp(OURS.name));
 
   await tap(card, "hockey-recap-view .player-link", "Ada Berg");
@@ -134,5 +183,23 @@ test("a full summary that fails leaves the quick one on show", async () => {
   await tap(card, "hockey-team-view .fixture-row.tappable");
   assert.ok($(card, "hockey-recap-view .scoreboard.over"));
   assert.equal($(card, "hockey-recap-view .recap-note"), null);
+  unmount(card);
+});
+
+test("a club's news opens where it was written", async () => {
+  const hass = hassWith();
+  const card = await teamPage(hass);
+  await tap(card, ".team-tabs button", "Nyheter");
+  assert.deepEqual(callsTo(hass, "get_news")[0].data, { config_entry_id: "entry-1", team: "NOR", limit: 40 });
+  const rows = $$(card, "hockey-team-view .news-row");
+  assert.equal(rows.length, 2);
+  assert.equal(text(rows[0].querySelector(".news-title")), "Ny tränare klar");
+  assert.equal(rows[0].getAttribute("href"), "https://news.example/2");
+  assert.equal(rows[0].getAttribute("target"), "_blank");
+  assert.match(text(rows[0].querySelector(".news-meta")), /^Kvällsbladet · /);
+  // Back and in again: read once.
+  await tap(card, ".team-tabs button", "Översikt");
+  await tap(card, ".team-tabs button", "Nyheter");
+  assert.equal(callsTo(hass, "get_news").length, 1);
   unmount(card);
 });

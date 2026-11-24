@@ -48,6 +48,8 @@ from .const import (
     CONF_LEAGUE,
     CONF_TEAMS,
     DOMAIN,
+    END_SETTLE,
+    END_SETTLE_MARGIN,
     HIGHLIGHTS_AFTER,
     HIGHLIGHTS_IDLE,
     HIGHLIGHTS_INTERVAL,
@@ -61,6 +63,8 @@ from .const import (
     LIVE_WINDOW_AFTER,
     LIVE_WINDOW_BEFORE,
     SCAN_INTERVAL,
+    SCHEDULE_HOLD,
+    SCHEDULE_RETRY_INTERVAL,
     STATE_POST_GAME,
     TABLE_BEHIND_INTERVAL,
 )
@@ -167,6 +171,10 @@ class SwedishHockeyCoordinator(DataUpdateCoordinator[LeagueData]):
         )
         # Svenska Spel's odds for the games it has opened betting on.
         self.odds = OddsBook(async_get_clientsession(hass), self.league)
+        # When the schedule was last read, and whether a failed read is being
+        # covered by it (SCHEDULE_HOLD).
+        self._fetched_at = dt_util.utcnow()
+        self._holding = False
         super().__init__(
             hass,
             _LOGGER,
@@ -230,7 +238,22 @@ class SwedishHockeyCoordinator(DataUpdateCoordinator[LeagueData]):
         try:
             teams, games = await self.client.async_fetch()
         except HockeyApiError as err:
-            raise UpdateFailed(str(err)) from err
+            now = dt_util.utcnow()
+            if self.data is None or now - self._fetched_at > SCHEDULE_HOLD:
+                raise UpdateFailed(str(err)) from err
+            # Once per outage: the retries come every quarter of an hour.
+            log = _LOGGER.debug if self._holding else _LOGGER.warning
+            log(
+                "Could not read the %s schedule, keeping the one from %s: %s",
+                self.league_name,
+                dt_util.as_local(self._fetched_at).strftime("%Y-%m-%d %H:%M"),
+                err,
+            )
+            self._holding = True
+            self.update_interval = SCHEDULE_RETRY_INTERVAL
+            return self.data
+        self._fetched_at = dt_util.utcnow()
+        self._holding = False
 
         # A broken table must not take the schedule down with it, so keep the
         # last one we managed to read.
@@ -419,6 +442,10 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
             self._async_idle_interval() if live.finished else self._async_live_interval()
         )
         self._async_announce(self._merge(live), game, live)
+        if live.finished and self.awaiting_result():
+            # The end is held for a score that is not level yet; look again
+            # soon rather than at the next game.
+            self.update_interval = self._async_live_interval()
         return live
 
     @property
@@ -677,24 +704,66 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
                 changed = True
 
         if live.finished and not record["ended"]:
+            score, decided_in = self._final_score(game, live)
+            if score is None or score[0] == score[1]:
+                # Neither league ends a game level, so a level "final" is a
+                # record that has not caught up: Västerås-Leksand 2026-11-13
+                # was published finished at 0-0 although Leksand won in
+                # overtime, and went out as a loss. Wait for the federation's
+                # sheet to settle it; only after END_SETTLE does it go out
+                # without a winner.
+                seen = record.setdefault("finished_seen", now.isoformat())
+                if seen == now.isoformat():
+                    changed = True
+                waited = now - (dt_util.parse_datetime(seen) or now)
+                closing = game.start + LIVE_WINDOW_AFTER - END_SETTLE_MARGIN
+                if waited < END_SETTLE and now < closing:
+                    if changed:
+                        self._schedule.async_save_goal_log()
+                    return
             record["ended"] = True
+            record.pop("finished_seen", None)
             changed = True
             is_home = game.home.key == self._team_key
-            scored = parse_score(live.score)
             won = None
-            if scored is not None and scored[0] != scored[1]:
-                won = (scored[0] > scored[1]) == is_home
+            if score is not None and score[0] != score[1]:
+                won = (score[0] > score[1]) == is_home
             self.hass.bus.async_fire(
                 EVENT_GAME_END,
                 self._event_data(game)
                 | {
-                    "score": live.score,
-                    "decided_in": live.decided_in,
+                    "score": f"{score[0]}-{score[1]}" if score else live.score,
+                    "decided_in": decided_in,
                     "we_won": won,
                 },
             )
         if changed:
             self._schedule.async_save_goal_log()
+
+    def _final_score(
+        self, game: Game, live: LiveGame
+    ) -> tuple[tuple[int, int] | None, str | None]:
+        """Return the final score and how it was decided.
+
+        The feed's score unless it is level and the federation's sheet for
+        the same game is not: then the sheet's, which writes overtime as a
+        fourth period and a shootout as a fifth.
+        """
+        score = parse_score(live.score)
+        sheet = self.sheet if self._sheet_game_uid == game.uid else None
+        if score is not None and score[0] != score[1]:
+            return score, live.decided_in
+        if sheet is None or (settled := sheet.score) is None or settled[0] == settled[1]:
+            return score, live.decided_in
+        periods = len(sheet.period_scores)
+        decided_in = "SO" if periods >= 5 else "OT" if periods == 4 else live.decided_in
+        return settled, decided_in
+
+    @callback
+    def awaiting_result(self) -> bool:
+        """Return True while a finished game's end waits on its score."""
+        record = (self._goal_log or {}).get(self._data_game_uid or "")
+        return bool(record) and not record.get("ended") and "finished_seen" in record
 
     def _detail(self, goal: Goal, at: datetime | None) -> dict[str, Any]:
         """Return what is kept about an announced goal."""
@@ -786,16 +855,21 @@ class LiveScoreCoordinator(DataUpdateCoordinator[LiveGame | None]):
             self._sheet_game_uid = game.uid
         if self._sheet_final:
             return
+        # Waiting on the sheet for a final score: a minute's cache is enough.
+        waiting = finished and self.sheet is not None
         try:
             sheet = await self._schedule.swehockey.async_sheet(
-                game, max_age=0 if finished else SHEET_TTL
+                game, max_age=0 if finished and not waiting else SHEET_TTL
             )
         except HockeyApiError as err:
             _LOGGER.debug("Could not read the game sheet for %s: %s", game.uid, err)
             return
         if sheet is not None:
             self.sheet = sheet
-            self._sheet_final = finished
+            # A finished game's sheet still level has not had its last goal
+            # written in yet; read it again until it has.
+            score = sheet.score
+            self._sheet_final = finished and not (score is not None and score[0] == score[1])
 
     @callback
     def _async_live_interval(self) -> timedelta:

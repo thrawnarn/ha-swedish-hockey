@@ -116,3 +116,29 @@ test("only this integration's entities make a team", () => {
     { team: "Aby", code: "AAA", entities: { live: "sensor.a_live", next: "sensor.a_next" } },
   ]);
 });
+
+test("the clubs' rows take on their squads' figures, kept for the next render", () => {
+  const teams = [{ team_code: "AAA", team: "Aby" }, { team_code: "BBB", team: "Bstad" }];
+  const squads = {
+    teams: [
+      {
+        team_code: "aaa",
+        players: 20,
+        height: 184.2,
+        weight: 85,
+        age: 26.1,
+        home_grown: 15,
+        shoots: { left: 12, right: 4 },
+        positions: { d: { players: 7, height: 186, weight: 88, age: 27 } },
+      },
+    ],
+  };
+  const rows = I.withSquads(teams, squads);
+  assert.equal(rows[0].sq_height, 184.2);
+  assert.equal(rows[0].sq_swedes, 75);
+  assert.equal(rows[0].sq_left, 75, "a share of those whose shot is known");
+  assert.equal(rows[0].sq_d_height, 186);
+  assert.equal(rows[1], teams[1], "a club without a squad is left as it was");
+  assert.equal(I.withSquads(teams, squads), rows, "the same question, the same list");
+  assert.equal(I.withSquads(teams, null), teams);
+});

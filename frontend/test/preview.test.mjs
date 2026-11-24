@@ -239,3 +239,26 @@ test("a late answer for a preview that was left is not shown", async () => {
   assert.ok($(card, "hockey-schedule-view"));
   unmount(card);
 });
+
+test("the two squads stand side by side, neither lit", async () => {
+  const hass = hassWith();
+  const card = await fromSchedule(hass);
+  await tap(card, ".fixture-row.tappable[title='Inför matchen']");
+  assert.equal(callsTo(hass, "get_squads").length, 1);
+  const sections = $$(card, "hockey-preview-view .team-section").map(text);
+  assert.ok(sections.includes("Trupperna"), sections);
+  const block = $$(card, "hockey-preview-view .team-section").find((s) => text(s) === "Trupperna").nextElementSibling;
+  const bars = [...block.querySelectorAll(".stat")];
+  assert.deepEqual(bars.map((b) => text(b.querySelector(".stat-label"))), [
+    "Snittlängd",
+    "Snittvikt",
+    "Snittålder",
+    "Svenska spelare",
+  ]);
+  assert.match(text(bars[0].querySelector(".stat-value")), /^\d{3},\d cm$/);
+  assert.match(text(bars[0].querySelector(".stat-detail")), /:[ae] i ligan$/);
+  assert.equal(text(bars[3].querySelector(".stat-value")), "84 %");
+  assert.equal(text(bars[3].querySelector(".stat-detail")), "21 av 25");
+  assert.equal(block.querySelectorAll(".lead").length, 0, "taller is not better");
+  unmount(card);
+});

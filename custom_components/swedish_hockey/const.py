@@ -35,6 +35,12 @@ SCAN_INTERVAL = timedelta(hours=6)
 # some while later, so a table read as a game ends can still be missing it.
 # Until it counts every finished game it is read again at this pace.
 TABLE_BEHIND_INTERVAL = timedelta(minutes=10)
+# A failed read of the schedule (Hockeyallsvenskan's page failed one at 03:24
+# and took the next-game sensor down until the next read, six hours later)
+# says nothing about the season already in hand. It is kept, and read again at
+# the retry pace, for up to a day; only then do the entities go unavailable.
+SCHEDULE_RETRY_INTERVAL = timedelta(minutes=15)
+SCHEDULE_HOLD = timedelta(days=1)
 
 # Live scoring polls only while a game is actually on. Outside that window the
 # coordinator still wakes up, but makes no API call - it just works out how long
@@ -56,6 +62,11 @@ LIVE_WINDOW_AFTER = timedelta(hours=4)
 # After a restart, a game that finished this recently is re-read once so the
 # match log and result come back. Once read it is not fetched again.
 LIVE_RECENT_AFTER = timedelta(hours=12)
+# How long a finished game with a level score waits for its winner before the
+# end goes out without one, and how far before the live window closes it gives
+# up regardless: the window closing would mean the end never went out at all.
+END_SETTLE = timedelta(minutes=30)
+END_SETTLE_MARGIN = timedelta(minutes=5)
 
 # Highlight clips turn up some time after the final whistle - usually within a
 # couple of hours, now and then not until the next morning. The page is read

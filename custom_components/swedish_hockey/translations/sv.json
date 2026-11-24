@@ -244,6 +244,20 @@
         }
       }
     },
+    "get_squads": {
+      "name": "Hämta trupper",
+      "description": "Returnerar lagens trupper i siffror - snittlängd, snittvikt och snittålder, totalt och per position, fattning och nationaliteter - och var varje lag placerar sig i serien.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF. Utelämnat ger alla lag."
+        }
+      }
+    },
     "get_form_table": {
       "name": "Hämta formtabell",
       "description": "Returnerar tabellen över lagens senaste matcher.",
@@ -361,6 +375,24 @@
         "seasons": {
           "name": "Säsonger",
           "description": "Hur många avslutade säsonger bakåt som ska sökas igenom."
+        }
+      }
+    },
+    "get_news": {
+      "name": "Hämta nyheter",
+      "description": "Returnerar de senaste nyheterna om ett lag - från klubbens egen sajt och tidningarna, via Google News - nyast först.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Serie",
+          "description": "Vilken serie laget spelar i."
+        },
+        "team": {
+          "name": "Lag",
+          "description": "Lagkod eller lagnamn, t.ex. LIF eller Leksands IF."
+        },
+        "limit": {
+          "name": "Antal",
+          "description": "Hur många artiklar som ska returneras."
         }
       }
     }

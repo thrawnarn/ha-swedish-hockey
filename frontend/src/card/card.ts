@@ -35,6 +35,9 @@ export class HockeyMatchCard extends LitElement {
   /** The face's own choice between a held result and the next game, pinned to
    *  the result it was made about. */
   protected declare _view: { id: string | null; choice: "next" | "result" } | null;
+  /** The reload offered while the sensor is unavailable: under way, or why it
+   *  was refused. */
+  protected declare _reload: "busy" | { error: string } | null;
 
   readonly ctl = new HockeyController(this);
 
@@ -42,6 +45,7 @@ export class HockeyMatchCard extends LitElement {
     hass: { attribute: false },
     _config: { state: true },
     _view: { state: true },
+    _reload: { state: true },
   };
 
   static override styles = [cardStyles, phoneDialogStyles];
@@ -142,9 +146,7 @@ export class HockeyMatchCard extends LitElement {
       </ha-card>`;
     }
     if (!showingHeldResult && (source.state === "unavailable" || source.state === "unknown")) {
-      return html`<ha-card class="pad">
-        ${isLive ? "Live scoring" : "Next game"} is unavailable
-      </ha-card>`;
+      return this.unavailable(isLive);
     }
 
     const a = showingHeldResult ? (lastResult as Row) : (source.attributes ?? {});
@@ -193,6 +195,32 @@ export class HockeyMatchCard extends LitElement {
     >
       ${content}
     </div>`;
+  }
+
+  // A failed read of the league leaves the sensor unavailable until the next
+  // one, hours away; reloading the entry reads it again straight away. Only
+  // an admin may reload an entry, so the refusal is shown as it comes.
+  private unavailable(isLive: boolean) {
+    const reload = async () => {
+      this._reload = "busy";
+      try {
+        const entry = await this.ctl.configEntryId();
+        if (!entry) throw new Error("Hittade inte integrationen");
+        await this.hass.callService("homeassistant", "reload_config_entry", { entry_id: entry });
+        this._reload = null;
+      } catch (err) {
+        this._reload = { error: (err as Error)?.message || String(err) };
+      }
+    };
+    const busy = this._reload === "busy";
+    const error = typeof this._reload === "object" ? this._reload?.error : null;
+    return html`<ha-card class="pad unavailable">
+      <div>${isLive ? "Livescore" : "Nästa match"} är inte tillgänglig</div>
+      <button class="reload" ?disabled=${busy} @click=${reload}>
+        ${busy ? "Laddar om…" : "Ladda om integrationen"}
+      </button>
+      ${error ? html`<div class="reload-error">${error}</div>` : nothing}
+    </ha-card>`;
   }
 
   private toggle(showingResult: boolean, resultId: string | null) {

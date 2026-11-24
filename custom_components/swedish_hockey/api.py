@@ -19,6 +19,7 @@ import logging
 import re
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -56,6 +57,15 @@ SHL_STATS_URL = f"{SHL_API}/statistics-v2/stats-info/{{table}}"
 SHL_STATS_COUNT = 1000
 SHL_FEED_URL = f"{SHL_API}/feeds"
 SHL_VIDEO_URL = "https://embed.staylive.tv/video/{video}?autoplay=1"
+# A club's squad names its players and nothing more; height, weight and age
+# are on each player's own record, one read apiece - some 350 for the league.
+SHL_SQUAD_URL = f"{SHL_API}/sports-v2/athletes/by-team-uuid/{{team}}"
+SHL_ATHLETE_URL = f"{SHL_API}/sports-v2/athlete-details/{{athlete}}"
+# Eight at a time read the league in some five seconds without leaning on the
+# site; a player's record is kept for the session, so later reads only ask
+# about players new to a squad.
+SHL_ATHLETE_READS = 8
+SHL_SQUAD_TTL = 6 * 3600
 
 HA_SCHEDULE_URL = "https://hockeyallsvenskan.se/pages/matcher"
 HA_STANDINGS_URL = "https://hockeyallsvenskan.se/pages/tabell"
@@ -317,6 +327,81 @@ class GameEvent:
         }
 
 
+_GOALIE_KINDS = ("goalie_in", "goalie_out")
+
+
+def goalie_moves(
+    events: list[GameEvent], period_rank: Callable[[Any], int]
+) -> list[GameEvent]:
+    """Return the events with each goalkeeper's coming and going explained.
+
+    The feeds log a goalkeeper in when he starts and out when the game ends,
+    and some at every period's end and start as well. Those say nothing a
+    reader does not know, so they are left out; what is left is told as what
+    it was: who started, who was replaced by whom, who went off for an extra
+    skater and came back. `events` is in the order things happened, and
+    `period_rank` says where a period comes.
+    """
+
+    def moment(event: Any) -> tuple[int, int]:
+        return (period_rank(event.period), event.seconds or 0)
+
+    # A goalkeeper "leaving" at the last moment of a period is the period
+    # ending, not him being pulled - at twenty minutes, or at five in a
+    # regular season's overtime, or at the goal that ended it.
+    ends: dict[int, int] = {}
+    for event in events:
+        rank, seconds = moment(event)
+        ends[rank] = max(ends.get(rank, 0), seconds)
+    in_goal: dict[str, str | None] = {}
+    pulled: dict[str, str] = {}
+    replaced: dict[str, str] = {}
+    result: list[GameEvent] = []
+    for index, event in enumerate(events):
+        if event.kind not in _GOALIE_KINDS:
+            result.append(event)
+            continue
+        side = event.team_code or event.team_name or ""
+        if event.kind == "goalie_out":
+            swap = any(
+                other.kind == "goalie_in"
+                and (other.team_code or other.team_name or "") == side
+                and other.player != event.player
+                and moment(other) == moment(event)
+                for other in events[index + 1 :]
+            )
+            # A change of goalkeeper is told wherever it falls, even as the
+            # last thing in a period.
+            rank, seconds = moment(event)
+            if not swap and seconds >= ends[rank]:
+                continue
+            in_goal[side] = None
+            if swap:
+                replaced[side] = event.player
+                result.append(replace(event, detail="Byts ut"))
+            else:
+                pulled[side] = event.player
+                result.append(replace(event, detail="Ut för en extra utespelare"))
+            continue
+        before = in_goal.get(side)
+        in_goal[side] = event.player
+        if before == event.player:
+            continue
+        if before is None and side in replaced:
+            detail = f"Ersätter {replaced.pop(side)}"
+        elif before is None and pulled.get(side) == event.player:
+            detail = "Tillbaka i mål"
+        elif before is None and side in pulled:
+            detail = "Går in i mål"
+        elif before is None:
+            detail = "Startar i mål"
+        else:
+            detail = f"Ersätter {before}"
+        result.append(replace(event, detail=detail))
+    return result
+
+
+
 @dataclass(frozen=True, slots=True)
 class PowerPlay:
     """Which side has the advantage, and until when."""
@@ -503,6 +588,15 @@ class LeagueClient:
         """Return who every player in the league is: picture, position, shirt."""
         raise NotImplementedError
 
+    async def async_squad_profiles(self) -> list[dict[str, Any]]:
+        """Return every club's squad: height, weight, birth date, shot, country.
+
+        Where the league's profiles carry all that it is the same list. It is
+        kept apart because the SHL's takes a read per player, which putting
+        faces to the statistics tables is not worth waiting for.
+        """
+        return await self.async_league_profiles()
+
     async def async_player_career(self, slug: str) -> list[dict[str, Any]]:
         """Return a player's career, season by season."""
         raise NotImplementedError
@@ -561,6 +655,12 @@ class ShlClient(LeagueClient):
         """Initialise the client with room to remember the season's id."""
         super().__init__(session)
         self._stats_ssgt: tuple[float, str] | None = None
+        # The squads are asked for by the club's id, which only the
+        # schedule's list of clubs carries.
+        self._team_uuids: dict[str, str] = {}
+        self._squads: tuple[float, list[dict[str, Any]]] | None = None
+        self._athletes: dict[str, dict[str, Any]] = {}
+        self._squad_lock = asyncio.Lock()
 
     async def async_fetch(self) -> tuple[dict[str, Team], list[Game]]:
         """Fetch the current SHL season from the site's own JSON API."""
@@ -603,6 +703,8 @@ class ShlClient(LeagueClient):
             for raw_team in payload.get("teamList") or []:
                 if team := _shl_team_from_list(raw_team):
                     teams.setdefault(team.key, team)
+                    if raw_team.get("uuid"):
+                        self._team_uuids[team.key] = str(raw_team["uuid"])
 
             for raw_game in payload.get("gameInfo") or []:
                 if game := _shl_game(raw_game):
@@ -614,6 +716,58 @@ class ShlClient(LeagueClient):
             raise HockeyApiError("SHL returned an empty schedule")
 
         return teams, sorted(games.values(), key=lambda game: game.start)
+
+    async def async_squad_profiles(self) -> list[dict[str, Any]]:
+        """Return every club's squad, each player with his own record laid on."""
+        async with self._squad_lock:
+            now = time.monotonic()
+            if self._squads and now - self._squads[0] < SHL_SQUAD_TTL:
+                return self._squads[1]
+            if not self._team_uuids:
+                raise HockeyApiError("SHL has not named its clubs yet")
+
+            squads: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+            for code, uuid in self._team_uuids.items():
+                payload = await self._async_get(SHL_SQUAD_URL.format(team=uuid))
+                for group in payload if isinstance(payload, list) else []:
+                    if not isinstance(group, dict):
+                        continue
+                    for raw in group.get("players") or []:
+                        if isinstance(raw, dict) and raw.get("uuid"):
+                            squads.append((code, group, raw))
+            if not squads:
+                raise HockeyApiError("SHL returned no squads")
+
+            gate = asyncio.Semaphore(SHL_ATHLETE_READS)
+
+            async def _read(uuid: str) -> None:
+                async with gate:
+                    try:
+                        payload = await self._async_get(
+                            SHL_ATHLETE_URL.format(athlete=uuid)
+                        )
+                    except HockeyApiError as err:
+                        # One missing record leaves one player out of the
+                        # averages; it is asked for again next time.
+                        _LOGGER.debug("No record for SHL player %s: %s", uuid, err)
+                        return
+                data = (payload or {}).get("athleteData") if isinstance(payload, dict) else None
+                if isinstance(data, dict):
+                    self._athletes[uuid] = data
+
+            await asyncio.gather(
+                *(
+                    _read(raw["uuid"])
+                    for _, _, raw in squads
+                    if raw["uuid"] not in self._athletes
+                )
+            )
+            players = [
+                _shl_profile(code, group, raw, self._athletes.get(raw["uuid"], {}))
+                for code, group, raw in squads
+            ]
+            self._squads = (now, players)
+            return players
 
     async def async_standings(self) -> list[Standing]:
         """Return the current SHL table."""
@@ -2204,6 +2358,30 @@ def create_client(league: str, session: ClientSession) -> LeagueClient:
     if league == LEAGUE_HOCKEYALLSVENSKAN:
         return HockeyallsvenskanClient(session)
     raise HockeyApiError(f"Unknown league: {league}")
+
+
+def _shl_profile(
+    code: str, group: dict[str, Any], raw: dict[str, Any], record: dict[str, Any]
+) -> dict[str, Any]:
+    """Return an SHL squad player in the shape of a Hockeyallsvenskan profile.
+
+    The squad only sorts its players into goalkeepers, backs and forwards, so
+    that is all the position there is. A shot is "Left", "Right" or "left".
+    """
+    shoots = str(record.get("shoots") or "").strip()[:1].upper()
+    return {
+        "name": str(
+            raw.get("fullName") or f"{raw.get('firstName', '')} {raw.get('lastName', '')}"
+        ).strip(),
+        "jersey": raw.get("jerseyNumber"),
+        "position_code": str(group.get("positionCode") or "").upper() or None,
+        "shoots": shoots if shoots in ("L", "R") else None,
+        "height": _as_int(record.get("height")),
+        "weight": _as_int(record.get("weight")),
+        "birth_date": record.get("dateOfBirth"),
+        "country": record.get("nationality") or raw.get("nationality"),
+        "team": code,
+    }
 
 
 def _shl_team_from_list(raw: Any) -> Team | None:

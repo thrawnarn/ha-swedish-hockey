@@ -697,7 +697,12 @@ function clubColour(hex, fallback) {
   return `rgb(${r4}, ${g2}, ${b3})`;
 }
 var positionOf = (player) => POSITIONS[String(player.position_code ?? "").toUpperCase()] ?? (player.role === "goalkeeper" ? POSITIONS.GK : { letter: "", group: "other" });
-var RECAP_ICON = { goal: "\u{1F6A8}", penalty: "\u{1F7E8}" };
+var RECAP_ICON = {
+  goal: "\u{1F6A8}",
+  penalty: "\u{1F7E8}",
+  goalie_in: "\u{1F9E4}",
+  goalie_out: "\u{1F6AA}"
+};
 var recapIcon = (event) => event.kind === "penalty_shot" ? event.scored ? "\u{1F6A8}" : "\u274C" : RECAP_ICON[event.kind] ?? "\u2022";
 function periodLabel(period) {
   const text = String(period ?? "").trim().toUpperCase();
@@ -810,6 +815,19 @@ var cardStyles = i`
       }
       ha-card { overflow: hidden; }
       .pad { padding: 16px; }
+      .unavailable { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+      .reload {
+        font: inherit;
+        padding: 6px 14px;
+        border: none;
+        border-radius: 18px;
+        cursor: pointer;
+        background: var(--primary-color);
+        color: var(--text-primary-color, #fff);
+      }
+      .reload[disabled] { opacity: 0.6; cursor: default; }
+      .reload:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+      .reload-error { color: var(--error-color, #e53935); font-size: 0.9em; }
       .title {
         display: flex;
         align-items: center;
@@ -1146,16 +1164,30 @@ var cardStyles = i`
       }
       .dialog-nav .bar-badge {
         position: absolute;
-        top: 2px;
+        top: 0;
         left: calc(50% + 10px);
-        padding: 1px 5px;
-        font-size: 0.85em;
+        /* The label's own size, not a fraction of it: at 0.85 of the nav's
+           small type the count and LIVE were hard to read on a phone. */
+        min-width: 1.6em;
+        box-sizing: border-box;
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 1em;
+        font-weight: 600;
+        line-height: 1.2;
+        text-align: center;
         color: #fff;
         background: var(--error-color, #e53935);
       }
       @media (min-width: 601px) {
-        /* Wider by the rail, so the view keeps the width it had. */
-        dialog:not(.picker) { width: min(612px, calc(100vw - 32px)); }
+        /* Wider by the rail, so the view keeps the width it had. And one
+           height whatever is in it: sized to its content, the dialog grew and
+           shrank around the centre of the screen at every tab and every
+           answer, and the rail moved under the pointer with it. */
+        dialog:not(.picker) {
+          width: min(612px, calc(100vw - 32px));
+          height: min(78vh, 720px);
+        }
         dialog:not(.picker)[open] { flex-direction: row; }
         .dialog-nav {
           order: -1;
@@ -2150,7 +2182,18 @@ var cardStyles = i`
         outline-offset: -2px;
       }
       .fixture-row.next { box-shadow: inset 3px 0 0 var(--primary-color); }
-      .team-tabs { padding-top: 12px; }
+      /* Five tabs since the news came: on a phone they may not all fit, so
+         they keep their width and the row scrolls. A row that scrolls may also
+         shrink in the panel's column, which cut the buttons in half; flex: none
+         holds it at its height. */
+      .team-tabs {
+        flex: none;
+        padding-top: 12px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .team-tabs::-webkit-scrollbar { display: none; }
+      .team-tabs button { flex: 1 0 auto; padding: 5px 8px; white-space: nowrap; }
       .recap-score { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .recap-figures { font-variant-numeric: tabular-nums; }
       .recap-score .fixture-logo { width: 22px; height: 22px; }
@@ -3053,6 +3096,45 @@ var cardStyles = i`
         background: var(--primary-text-color);
         opacity: 0.55;
       }
+      /* A club's news: the headline, then the paper and when. */
+      .news-row {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 9px 0;
+        border-top: 1px solid var(--divider-color);
+        color: var(--primary-text-color);
+        text-decoration: none;
+      }
+      .news-row:first-of-type { border-top: none; }
+      .news-row:hover .news-title { text-decoration: underline; }
+      .news-title { font-size: 0.92em; font-weight: 500; line-height: 1.3; }
+      .news-meta { font-size: 0.78em; color: var(--secondary-text-color); }
+      /* The squad by position: count, height, weight and age. */
+      .sq-table {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) repeat(4, 3.6em);
+        column-gap: 6px;
+        padding: 6px 0 10px;
+        border-top: 1px solid var(--divider-color);
+        font-size: 0.86em;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .sq-table > span { padding: 3px 0; }
+      .sq-head {
+        font-size: 0.84em;
+        letter-spacing: 0.04em;
+        color: var(--secondary-text-color);
+      }
+      .sq-label { text-align: left; }
+      .sq-end {
+        display: inline-block;
+        min-width: 4.4em;
+        color: var(--secondary-text-color);
+      }
+      .ts-board-title.sq-subtitle { padding-top: 8px; }
+      .sq-unknown { color: var(--secondary-text-color); }
       .ts-leaders {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3356,6 +3438,11 @@ var badgeStyles = i`
 `;
 
 // src/teams.ts
+var BY_TRANSLATION_KEY = {
+  live_score: "live",
+  next_game: "next",
+  standing: "standings"
+};
 function findTeams(hass) {
   if (!hass?.states || !hass?.entities || !hass?.devices) return [];
   const byDevice = /* @__PURE__ */ new Map();
@@ -3372,6 +3459,7 @@ function findTeams(hass) {
     if ("in_progress" in a3 && "live_scoring" in a3) role = "live";
     else if ("stat_net_number" in a3 || "last_result" in a3) role = "next";
     else if ("table" in a3 && "points" in a3) role = "standings";
+    else role = BY_TRANSLATION_KEY[entry.translation_key ?? ""] ?? null;
     if (!role) continue;
     if (!byDevice.has(deviceId)) byDevice.set(deviceId, {});
     byDevice.get(deviceId)[role] = entityId;
@@ -3434,6 +3522,16 @@ function dayTitle(date, offset, locale) {
   }
   const text = date.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+function newsWhen(value, locale, time = { hour: "2-digit", minute: "2-digit" }) {
+  const date = new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) return "";
+  const midnight = (d3) => new Date(d3.getFullYear(), d3.getMonth(), d3.getDate()).getTime();
+  const days = Math.round((midnight(date) - midnight(/* @__PURE__ */ new Date())) / 864e5);
+  const clock = date.toLocaleTimeString(locale, time);
+  if (days === 0) return `Idag ${clock}`;
+  if (days === -1) return `Ig\xE5r ${clock}`;
+  return date.toLocaleDateString(locale, { day: "numeric", month: "short" });
 }
 
 // src/stats-model.ts
@@ -3505,8 +3603,32 @@ var TEAM_METRICS = {
   ENG: { label: "M\xE5l i tom kasse", short: "TK" },
   ATT_avg: { label: "Publiksnitt hemma", short: "Snitt", kind: "crowd" },
   ATT_total: { label: "Publik hemma totalt", short: "Totalt", kind: "crowd" },
-  ATT_GP: { label: "Hemmamatcher", short: "M" }
+  ATT_GP: { label: "Hemmamatcher", short: "M" },
+  // Who the players are, from the squads rather than the statistics tables
+  // (`withSquads`). First is the tallest, heaviest or oldest - neither better
+  // nor worse, but a list has to start somewhere.
+  sq_height: { label: "Snittl\xE4ngd (cm)", short: "L\xE4ngd", kind: "dec1" },
+  sq_weight: { label: "Snittvikt (kg)", short: "Vikt", kind: "dec1" },
+  sq_age: { label: "Snitt\xE5lder (\xE5r)", short: "\xC5lder", kind: "dec1" },
+  sq_swedes: { label: "Andel svenska spelare", short: "Sve%", kind: "pct" },
+  sq_left: { label: "Andel v\xE4nsterfattade", short: "V%", kind: "pct" },
+  sq_players: { label: "Spelare i truppen", short: "Antal" },
+  ...squadPositionMetrics()
 };
+function squadPositionMetrics() {
+  const metrics = {};
+  for (const [group, who] of [
+    ["gk", "m\xE5lvakterna"],
+    ["d", "backarna"],
+    ["f", "forwards"]
+  ]) {
+    metrics[`sq_${group}_height`] = { label: `Snittl\xE4ngd, ${who} (cm)`, short: "L\xE4ngd", kind: "dec1" };
+    metrics[`sq_${group}_weight`] = { label: `Snittvikt, ${who} (kg)`, short: "Vikt", kind: "dec1" };
+    metrics[`sq_${group}_age`] = { label: `Snitt\xE5lder, ${who} (\xE5r)`, short: "\xC5lder", kind: "dec1" };
+    metrics[`sq_${group}_players`] = { label: `Antal ${who}`, short: "Antal" };
+  }
+  return metrics;
+}
 var STATS_KINDS = {
   skaters: { metrics: SKATER_METRICS, label: "Utespelare" },
   goalies: { metrics: GOALIE_METRICS, label: "M\xE5lvakter" },
@@ -3569,9 +3691,55 @@ var STATS_COLUMNS = {
       sort: "FO_perc",
       columns: ["FO_perc", "PIM_GP", "Hits", "BKS", "CF_perc"]
     },
-    { id: "crowd", label: "Publik", sort: "ATT_avg", columns: ["ATT_avg", "ATT_total", "ATT_GP"] }
+    { id: "crowd", label: "Publik", sort: "ATT_avg", columns: ["ATT_avg", "ATT_total", "ATT_GP"] },
+    {
+      id: "squad",
+      label: "Trupp",
+      sort: "sq_height",
+      columns: ["sq_height", "sq_weight", "sq_age", "sq_swedes", "sq_left"]
+    },
+    ...[
+      ["d", "Backar"],
+      ["f", "Forwards"],
+      ["gk", "M\xE5lvakter"]
+    ].map(([group, label]) => ({
+      id: `squad_${group}`,
+      label,
+      sort: `sq_${group}_height`,
+      columns: ["height", "weight", "age", "players"].map((k2) => `sq_${group}_${k2}`)
+    }))
   ]
 };
+var WITH_SQUADS = /* @__PURE__ */ new WeakMap();
+function withSquads(teams, squads) {
+  const rows2 = teams ?? [];
+  const clubs = squads?.teams ?? [];
+  if (!clubs.length) return rows2;
+  const kept = WITH_SQUADS.get(rows2);
+  if (kept && kept.squads === squads) return kept.rows;
+  const share = (part, whole) => whole ? Math.round(1e3 * Number(part ?? 0) / whole) / 10 : null;
+  const merged = rows2.map((row) => {
+    const club = clubs.find((c4) => clubKey(c4.team_code) === clubKey(row.team_code));
+    if (!club?.players) return row;
+    const { left = 0, right = 0 } = club.shoots ?? {};
+    const extra = {
+      sq_height: club.height,
+      sq_weight: club.weight,
+      sq_age: club.age,
+      sq_swedes: share(club.home_grown, club.players),
+      sq_left: share(left, left + right),
+      sq_players: club.players
+    };
+    for (const [group, figures] of Object.entries(club.positions ?? {})) {
+      for (const key of ["height", "weight", "age", "players"]) {
+        extra[`sq_${group}_${key}`] = figures?.[key] ?? null;
+      }
+    }
+    return { ...row, ...extra };
+  });
+  WITH_SQUADS.set(rows2, { squads, rows: merged });
+  return merged;
+}
 var STATS_LEADERS = {
   skaters: ["TP", "G", "A", "PlusMinus", "PPP", "GWG", "SOG", "S_perc", "FO_perc", "TOI_GP", "Hits", "BKS", "PIM"],
   goalies: ["SVS_perc", "GAA", "SO", "W"],
@@ -3648,6 +3816,7 @@ var STATE = [
   "day",
   "stats",
   "statsData",
+  "squads",
   "picker",
   "preview"
 ];
@@ -3825,6 +3994,7 @@ var HockeyController = class {
     this.preview = null;
     if (id === "game") {
       this.panel = "game";
+      this.loadSquads();
       return;
     }
     this.panel = "table";
@@ -4048,6 +4218,7 @@ var HockeyController = class {
   // late answer is still the answer. A stale copy stays on show while the
   // fresh one is read.
   async loadStats(scope = this.statsScope()) {
+    this.loadSquads();
     const kept = this.statsData?.[scope];
     if (kept?.loading) return;
     if (kept?.data && Date.now() - (kept.at ?? 0) < STATS_FRESH) return;
@@ -4065,6 +4236,19 @@ var HockeyController = class {
         loading: false,
         error: errorText(err)
       });
+    }
+  }
+  // Squads change between games, not during one; the SHL's take some
+  // seconds to read the first time, so they are kept as long as the stats.
+  async loadSquads() {
+    const kept = this.squads;
+    if (kept?.loading) return;
+    if (kept?.data && Date.now() - (kept.at ?? 0) < STATS_FRESH) return;
+    this.squads = { ...kept ?? {}, loading: true, error: null };
+    try {
+      this.squads = { data: await this.ask("get_squads"), at: Date.now() };
+    } catch (err) {
+      this.squads = { ...this.squads ?? {}, loading: false, error: errorText(err) };
     }
   }
   statsScope() {
@@ -4141,6 +4325,18 @@ var HockeyController = class {
       await this.loadTeamSeason(0);
     }
     if (tab === "stats") this.loadStats("season");
+    if (tab === "roster") this.loadSquads();
+    if (tab === "news" && !this.team?.news) {
+      this.team = { ...this.team, newsLoading: true };
+      try {
+        const data = await this.askTeam(code, "get_news", { limit: 40 });
+        if (this.stale(token)) return;
+        this.team = { ...this.team, newsLoading: false, news: data?.news ?? [] };
+      } catch (err) {
+        if (this.stale(token)) return;
+        this.team = { ...this.team, newsLoading: false, newsError: errorText(err) };
+      }
+    }
     if (tab === "roster" && !this.team?.roster) {
       this.team = { ...this.team, rosterLoading: true };
       try {
@@ -4236,6 +4432,7 @@ var HockeyController = class {
       history: { loading: true }
     };
     if (this.config.show_stats !== false) this.loadStats("season");
+    this.loadSquads();
     this.ask("get_matchup", { game_id: game.game_id }).then((data) => {
       if (current()) this.preview = { ...this.preview, loading: false, data };
     }).catch((err) => {
@@ -4270,6 +4467,7 @@ var HockeyController = class {
     if (!row?.game_id && !row?.latest) return;
     const token = this.newRequest();
     this.recap = { loading: true, row };
+    this.loadSquads();
     const ask = (details) => this.ask("get_recap", {
       team: teamCode || this.teamRef(),
       ...row.game_id ? { game_id: row.game_id } : {},
@@ -4711,9 +4909,7 @@ var HockeyMatchCard = class extends i4 {
       </ha-card>`;
     }
     if (!showingHeldResult && (source.state === "unavailable" || source.state === "unknown")) {
-      return b2`<ha-card class="pad">
-        ${isLive ? "Live scoring" : "Next game"} is unavailable
-      </ha-card>`;
+      return this.unavailable(isLive);
     }
     const a3 = showingHeldResult ? lastResult : source.attributes ?? {};
     return b2`
@@ -4755,6 +4951,31 @@ var HockeyMatchCard = class extends i4 {
       ${content}
     </div>`;
   }
+  // A failed read of the league leaves the sensor unavailable until the next
+  // one, hours away; reloading the entry reads it again straight away. Only
+  // an admin may reload an entry, so the refusal is shown as it comes.
+  unavailable(isLive) {
+    const reload = async () => {
+      this._reload = "busy";
+      try {
+        const entry = await this.ctl.configEntryId();
+        if (!entry) throw new Error("Hittade inte integrationen");
+        await this.hass.callService("homeassistant", "reload_config_entry", { entry_id: entry });
+        this._reload = null;
+      } catch (err) {
+        this._reload = { error: err?.message || String(err) };
+      }
+    };
+    const busy = this._reload === "busy";
+    const error = typeof this._reload === "object" ? this._reload?.error : null;
+    return b2`<ha-card class="pad unavailable">
+      <div>${isLive ? "Livescore" : "N\xE4sta match"} är inte tillgänglig</div>
+      <button class="reload" ?disabled=${busy} @click=${reload}>
+        ${busy ? "Laddar om\u2026" : "Ladda om integrationen"}
+      </button>
+      ${error ? b2`<div class="reload-error">${error}</div>` : A}
+    </ha-card>`;
+  }
   toggle(showingResult, resultId) {
     const label = showingResult ? "Visa n\xE4sta match" : "Visa resultatet";
     return b2`
@@ -4774,7 +4995,8 @@ var HockeyMatchCard = class extends i4 {
 HockeyMatchCard.properties = {
   hass: { attribute: false },
   _config: { state: true },
-  _view: { state: true }
+  _view: { state: true },
+  _reload: { state: true }
 };
 HockeyMatchCard.styles = [cardStyles, phoneDialogStyles];
 
@@ -4837,6 +5059,7 @@ var HockeyMatchBadge = class extends HockeyMatchCard {
     ctl.tableView = "table";
     if (ctl.state(ctl.ids.live)?.attributes?.in_progress === true) {
       ctl.panel = "game";
+      ctl.loadSquads();
     } else if (this.shownResult) {
       const start = new Date(this.shownResult.start ?? "");
       const midnight = (d3) => new Date(d3.getFullYear(), d3.getMonth(), d3.getDate());
@@ -5445,6 +5668,73 @@ function periodScoresLine(scores) {
   </span>`;
 }
 
+// src/parts/squads.ts
+var SQUAD = [
+  ["height", "Snittl\xE4ngd", "cm"],
+  ["weight", "Snittvikt", "kg"],
+  ["age", "Snitt\xE5lder", "\xE5r"]
+];
+var decimal = (value) => value.toFixed(1).replace(".", ",");
+function squadCompare(ctx, homeCode, awayCode) {
+  const { ctl } = ctx;
+  const entry = ctl.squads;
+  if (!entry?.data) {
+    return entry?.loading ? b2`<div class="team-section">Trupperna</div>${loading("M\xE4ter trupperna\u2026", "table")}` : A;
+  }
+  const teams = entry.data.teams ?? [];
+  const find = (code) => teams.find((row) => clubKey(row.team_code) === clubKey(code));
+  const home = find(homeCode);
+  const away = find(awayCode);
+  if (!home?.players || !away?.players) return A;
+  const homeColour = ctl.clubColourOf(homeCode);
+  const awayColour = ctl.clubColourOf(awayCode) === homeColour ? "var(--secondary-text-color)" : ctl.clubColourOf(awayCode);
+  const bar = (label, a3, b3, shown, share, foot) => b2`
+    <div class="stat">
+      <div class="stat-values">
+        <span class="stat-value">${shown(a3)}</span>
+        <span class="stat-value">${shown(b3)}</span>
+      </div>
+      <div class="bar-track">
+        <span class="bar-side home">
+          <span class="bar-fill" style=${`width:${share(a3).toFixed(1)}%;background:${homeColour}`}></span>
+        </span>
+        <span class="bar-side away">
+          <span class="bar-fill" style=${`width:${share(b3).toFixed(1)}%;background:${awayColour}`}></span>
+        </span>
+      </div>
+      <div class="stat-foot">
+        <span class="stat-detail">${foot[0]}</span>
+        <span class="stat-label">${label}</span>
+        <span class="stat-detail">${foot[1]}</span>
+      </div>
+    </div>
+  `;
+  const rows2 = SQUAD.filter(
+    ([key]) => typeof home[key] === "number" && typeof away[key] === "number"
+  ).map(([key, label, unit]) => {
+    const values = teams.map((t3) => t3[key]).filter((v2) => typeof v2 === "number");
+    const low = Math.min(...values);
+    const span = Math.max(...values) - low;
+    const share = (v2) => 8 + 92 * (span ? Math.min(1, Math.max(0, (v2 - low) / span)) : 1);
+    const where = (row) => row.ranks?.[key] ? `${ordinal(row.ranks[key])} i ligan` : "";
+    return bar(label, home[key], away[key], (v2) => `${decimal(v2)} ${unit}`, share, [
+      where(home),
+      where(away)
+    ]);
+  });
+  const swedes = (row) => 100 * Number(row.home_grown ?? 0) / row.players;
+  rows2.push(
+    bar("Svenska spelare", swedes(home), swedes(away), (v2) => `${Math.round(v2)} %`, (v2) => v2, [
+      `${home.home_grown ?? 0} av ${home.players}`,
+      `${away.home_grown ?? 0} av ${away.players}`
+    ])
+  );
+  return b2`
+    <div class="team-section">Trupperna</div>
+    <div class="stats squads">${rows2}</div>
+  `;
+}
+
 // src/parts/stat-bars.ts
 function statBars(ctx, stats, game = {}) {
   if (!stats?.length) return A;
@@ -5543,6 +5833,7 @@ var HockeyGameView = class extends PartElement {
     })}
       ${statBars(ctx, stats, a3)}
       ${events.length ? timeline(ctx, events) : b2`<div class="recap-note">Inget har hänt än.</div>`}
+      ${squadCompare(ctx, a3.home_code, a3.away_code)}
     `;
   }
 };
@@ -5936,7 +6227,7 @@ var HockeyPreviewView = class extends PartElement {
       ${busy && !data ? loading("H\xE4mtar matchinfo\u2026", "table") : A}
       ${error && !data ? b2`<div class="recap-note">${error}</div>` : A}
       ${data ? b2`${this.standing(data)} ${this.form(data)} ${this.meetings(data)} ${this.season(data)}
-          ${this.players(data)}` : A}
+          ${squadCompare(ctx, data.game?.home_code, data.game?.away_code)} ${this.players(data)}` : A}
     `;
   }
   // ---- The head ---------------------------------------------------------------
@@ -6370,6 +6661,7 @@ var HockeyRecapView = class extends PartElement {
       ${events.length ? b2`${sparse ? b2`<div class="recap-note">
                   Målen kommer från matchprotokollet – den detaljerade rapporten saknas just nu.
                 </div>` : A}${timeline(ctx, events)}` : b2`<div class="recap-note">Inget i protokollet.</div>`}
+      ${squadCompare(ctx, game.home_code, game.away_code)}
     `;
   }
 };
@@ -6795,7 +7087,7 @@ var HockeyStatsView = class extends PartElement {
     const { ctx } = this;
     const { ctl } = ctx;
     const metrics = STATS_KINDS[kind].metrics;
-    const all = data?.[kind] ?? [];
+    const all = kind === "teams" ? withSquads(data?.teams, ctl.squads?.data) : data?.[kind] ?? [];
     const has = (key2) => all.some((row) => row[key2] !== void 0 && row[key2] !== null);
     const groups = STATS_COLUMNS[kind].map((group2) => ({ ...group2, columns: group2.columns.filter(has) })).filter((group2) => group2.columns.length);
     if (!all.length || !groups.length) {
@@ -6993,6 +7285,25 @@ var HockeyTableView = class extends PartElement {
 };
 
 // src/views/team.ts
+var SQUAD_FIGURES = [
+  ["height", "Snittl\xE4ngd", "cm"],
+  ["weight", "Snittvikt", "kg"],
+  ["age", "Snitt\xE5lder", "\xE5r"]
+];
+var SQUAD_GROUPS = [
+  ["gk", "M\xE5lvakter"],
+  ["d", "Backar"],
+  ["f", "Forwards"]
+];
+var SQUAD_ENDS = [
+  ["tallest", "L\xE4ngst", "cm"],
+  ["shortest", "Kortast", "cm"],
+  ["heaviest", "Tyngst", "kg"],
+  ["lightest", "L\xE4ttast", "kg"],
+  ["oldest", "\xC4ldst", "\xE5r"],
+  ["youngest", "Yngst", "\xE5r"]
+];
+var decimal2 = (value, digits = 1) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits).replace(".", ",") : "\u2013";
 var HockeyTeamView = class extends PartElement {
   updated() {
     const team = this.ctx.ctl.team;
@@ -7040,7 +7351,8 @@ var HockeyTeamView = class extends PartElement {
       ["overview", "\xD6versikt"],
       ["schedule", "Spelschema"],
       ["roster", "Trupp"],
-      config.show_stats !== false && ["stats", "Statistik"]
+      config.show_stats !== false && ["stats", "Statistik"],
+      ["news", "Nyheter"]
     ].filter(Boolean).map(
       ([id, label]) => b2`
             <button
@@ -7059,6 +7371,7 @@ var HockeyTeamView = class extends PartElement {
       ${tab === "schedule" ? this.schedule(team) : A}
       ${tab === "roster" ? this.roster(team) : A}
       ${tab === "stats" ? this.stats(team) : A}
+      ${tab === "news" ? this.news(team) : A}
     `;
   }
   overview(team) {
@@ -7091,8 +7404,37 @@ var HockeyTeamView = class extends PartElement {
       )
     ];
   }
+  // ---- News -------------------------------------------------------------------
+  // What the club's own site and the papers have written, newest first. Each
+  // opens where it was published; the integration only knows the headline.
+  news(team) {
+    const { locale, hass } = this.ctx;
+    const { news, newsLoading, newsError } = team;
+    if (newsLoading) return loading("H\xE4mtar nyheterna\u2026", "table");
+    if (newsError) return b2`<div class="recap-note">${newsError}</div>`;
+    if (!news?.length) return b2`<div class="recap-note">Inga nyheter den senaste månaden.</div>`;
+    return b2`
+      ${news.map(
+      (item) => b2`
+          <a class="news-row" href=${item.url} target="_blank" rel="noopener noreferrer">
+            <span class="news-title">${item.title}</span>
+            <span class="news-meta"
+              >${[item.source, newsWhen(item.published, locale, timeFormat(hass))].filter(Boolean).join(" \xB7 ")}</span
+            >
+          </a>
+        `
+    )}
+      <div class="pv-source">Från klubbens sajt och tidningarna, via Google News</div>
+    `;
+  }
   // ---- The squad --------------------------------------------------------------
+  // The squad in figures goes above the list, and stays when the list is
+  // not to be had: the SHL publishes no player statistics, but its squads
+  // can still be measured.
   roster(team) {
+    return b2`${this.squad(team.row?.team_code)}${this.rosterList(team)}`;
+  }
+  rosterList(team) {
     const { ctl } = this.ctx;
     const { row, roster, rosterLoading, rosterError } = team;
     if (rosterLoading) return loading("H\xE4mtar truppen\u2026", "table");
@@ -7121,6 +7463,115 @@ var HockeyTeamView = class extends PartElement {
         </button>
       </div>
       ${groups.map((group) => this.rosterTable(team, group, row.team_code))}
+    `;
+  }
+  // ---- The squad in figures ------------------------------------------------------
+  // Height, weight and age against the other clubs: a place, and a bar from
+  // the league's lowest to its highest with the league's average marked.
+  // First is the tallest, heaviest or oldest, which is neither good nor bad,
+  // so the places are not coloured as the statistics' are.
+  squad(code) {
+    const { data, loading: busy } = this.ctx.ctl.squads ?? {};
+    if (!data) return busy ? loading("M\xE4ter truppen\u2026", "table") : A;
+    const teams = data.teams ?? [];
+    const ours = teams.find((t3) => clubKey(t3.team_code) === clubKey(code));
+    if (!ours?.players) return A;
+    const league = data.league ?? {};
+    const colour = this.ctx.ctl.clubColourOf(code);
+    const { left = 0, right = 0 } = ours.shoots ?? {};
+    const unknown = ours.players - left - right;
+    return b2`
+      <div class="team-section">Truppen i siffror</div>
+      ${SQUAD_FIGURES.map(
+      ([key, label, unit]) => this.squadRow(teams, ours, league, key, label, unit, colour)
+    )}
+      <div class="sq-table">
+        <span class="sq-head"></span>
+        <span class="sq-head">Antal</span>
+        ${SQUAD_FIGURES.map(([, , unit]) => b2`<span class="sq-head">${unit}</span>`)}
+        ${SQUAD_GROUPS.map(([key, label]) => {
+      const group = ours.positions?.[key];
+      if (!group?.players) return A;
+      const theirs = league.positions?.[key] ?? {};
+      return b2`
+            <span class="sq-label">${label}</span>
+            <span>${group.players}</span>
+            ${SQUAD_FIGURES.map(
+        ([figure, name, unit]) => b2`<span title=${`${name} i serien: ${decimal2(theirs[figure])} ${unit}`}
+                  >${decimal2(group[figure])}</span
+                >`
+      )}
+          `;
+    })}
+      </div>
+      <div class="ts-leaders">
+        <div class="ts-board">
+          <span class="ts-board-title">Ytterligheter</span>
+          ${SQUAD_ENDS.map(([key, label, unit]) => {
+      const end = ours[key];
+      if (!end?.player) return A;
+      return b2`
+              <span class="ts-board-row">
+                <span class="lb-name"
+                  ><span class="sq-end">${label}</span> ${playerLink(
+        this.ctx,
+        end.player,
+        ours.team_code
+      )}</span
+                >
+                <span class="lb-value"
+                  >${unit === "\xE5r" ? decimal2(end.value) : end.value} ${unit}</span
+                >
+              </span>
+            `;
+    })}
+        </div>
+        <div class="ts-board">
+          <span class="ts-board-title">Ursprung</span>
+          ${(ours.countries ?? []).map(
+      (country) => b2`
+              <span class="ts-board-row">
+                <span class="lb-name">${country.name ?? country.country}</span>
+                <span class="lb-value">${country.players}</span>
+              </span>
+            `
+    )}
+          <span class="ts-board-title sq-subtitle">Fattning</span>
+          <span class="ts-board-row">
+            <span class="lb-name">Vänster</span><span class="lb-value">${left}</span>
+          </span>
+          <span class="ts-board-row">
+            <span class="lb-name">Höger</span><span class="lb-value">${right}</span>
+          </span>
+          ${unknown > 0 ? b2`<span class="ts-board-row sq-unknown">
+                <span class="lb-name">Okänd</span><span class="lb-value">${unknown}</span>
+              </span>` : A}
+        </div>
+      </div>
+    `;
+  }
+  squadRow(teams, ours, league, key, label, unit, colour) {
+    const value = ours[key];
+    if (typeof value !== "number") return A;
+    const values = teams.map((t3) => t3[key]).filter((v2) => typeof v2 === "number");
+    const low = Math.min(...values);
+    const span = Math.max(...values) - low;
+    const along = (v2) => span ? Math.min(1, Math.max(0, (v2 - low) / span)) : 1;
+    const mean = typeof league[key] === "number" ? league[key] : null;
+    const place = ours.ranks?.[key];
+    return b2`
+      <div class="ts-row" title=${`Serien: ${decimal2(mean)} ${unit}`}>
+        <span class="ts-label">${label}</span>
+        <span class="ts-value">${decimal2(value)} ${unit}</span>
+        <span class="st-place">${place ? ordinal(place) : ""}</span>
+        <span class="ts-track">
+          <span
+            class="ts-fill"
+            style=${`width: ${(along(value) * 100).toFixed(1)}%; background: ${colour}`}
+          ></span>
+          ${mean !== null ? b2`<span class="ts-mean" style=${`left: ${(along(mean) * 100).toFixed(1)}%`}></span>` : A}
+        </span>
+      </div>
     `;
   }
   // Each table sorts on its own: what a goalkeeper is worth reading by is not

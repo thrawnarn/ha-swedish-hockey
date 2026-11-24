@@ -10,6 +10,12 @@ import type { EntityIds, FoundTeam, HomeAssistant } from "./types";
 // device with a pending update as a team. Within the integration, each entity
 // is then told apart by the attributes only it carries - not by entity id,
 // which the user is free to rename.
+const BY_TRANSLATION_KEY: Record<string, keyof EntityIds> = {
+  live_score: "live",
+  next_game: "next",
+  standing: "standings",
+};
+
 export function findTeams(hass: HomeAssistant | undefined): FoundTeam[] {
   if (!hass?.states || !hass?.entities || !hass?.devices) return [];
   const byDevice = new Map<string, EntityIds>();
@@ -28,6 +34,10 @@ export function findTeams(hass: HomeAssistant | undefined): FoundTeam[] {
     if ("in_progress" in a && "live_scoring" in a) role = "live";
     else if ("stat_net_number" in a || "last_result" in a) role = "next";
     else if ("table" in a && "points" in a) role = "standings";
+    // An unavailable sensor has no attributes at all, and a card that lost
+    // its next game that way said "No entities found" instead of offering the
+    // reload. The registry's translation key outlives the state.
+    else role = BY_TRANSLATION_KEY[entry.translation_key ?? ""] ?? null;
     if (!role) continue;
     if (!byDevice.has(deviceId)) byDevice.set(deviceId, {});
     byDevice.get(deviceId)![role] = entityId;
