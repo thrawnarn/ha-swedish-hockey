@@ -1398,6 +1398,17 @@ var cardStyles = i`
       }
       .hero-stats .stat-value { font-size: 1.2em; font-weight: 700; }
       .hero-headline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      /* A club's record is four numbers and the widest of the four figures:
+         in equal columns "13-2-2-4" broke over two lines on a phone. Each
+         column takes what its figure needs and the rest goes between them. */
+      .team-hero-stats {
+        grid-template-columns: repeat(4, auto);
+        justify-content: space-between;
+      }
+      .team-hero-stats .stat-value { white-space: nowrap; }
+      @media (max-width: 360px) {
+        .team-hero-stats .stat-value { font-size: 1.05em; }
+      }
       .hero-headline .stat-value { font-size: 1.7em; font-weight: 800; }
       .team-head {
         display: flex;
@@ -7340,7 +7351,7 @@ var HockeyTeamView = class extends PartElement {
                 <span class="hero-big-label">poäng</span>
               </div>` : A}
         </div>
-        <div class="hero-stats">
+        <div class="hero-stats team-hero-stats">
           ${stat("Matcher", row.games_played)} ${stat("V\u2013\xD6V\u2013\xD6F\u2013F", record)} ${stat("M\xE5l", goals)}
           ${stat("M\xE5lskillnad", plus(row.goal_difference))}
         </div>

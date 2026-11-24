@@ -674,6 +674,17 @@ export const cardStyles = css`
       }
       .hero-stats .stat-value { font-size: 1.2em; font-weight: 700; }
       .hero-headline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      /* A club's record is four numbers and the widest of the four figures:
+         in equal columns "13-2-2-4" broke over two lines on a phone. Each
+         column takes what its figure needs and the rest goes between them. */
+      .team-hero-stats {
+        grid-template-columns: repeat(4, auto);
+        justify-content: space-between;
+      }
+      .team-hero-stats .stat-value { white-space: nowrap; }
+      @media (max-width: 360px) {
+        .team-hero-stats .stat-value { font-size: 1.05em; }
+      }
       .hero-headline .stat-value { font-size: 1.7em; font-weight: 800; }
       .team-head {
         display: flex;

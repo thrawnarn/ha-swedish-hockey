@@ -108,7 +108,7 @@ export class HockeyTeamView extends PartElement {
               </div>`
             : nothing}
         </div>
-        <div class="hero-stats">
+        <div class="hero-stats team-hero-stats">
           ${stat("Matcher", row.games_played)} ${stat("V–ÖV–ÖF–F", record)} ${stat("Mål", goals)}
           ${stat("Målskillnad", plus(row.goal_difference))}
         </div>

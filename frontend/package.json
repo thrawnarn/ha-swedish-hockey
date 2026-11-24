@@ -1,6 +1,6 @@
 {
   "name": "hockey-match-card",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "The hockey-match-card and hockey-match-badge Lovelace elements, built into custom_components/swedish_hockey/www/.",
   "license": "MIT",
