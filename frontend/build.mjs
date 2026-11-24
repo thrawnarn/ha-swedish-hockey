@@ -24,6 +24,10 @@ const card = {
   // person looking in the integration's www/ folder finds.
   minify: false,
   legalComments: "eof",
+  // node_modules is a symlink here (deps.sh) and a real folder in CI. Without
+  // this the output names each module by where the link points, so the
+  // committed file differed from CI's build by its comments alone.
+  preserveSymlinks: true,
   banner: {
     js:
       "// hockey-match-card -- GENERATED from frontend/src by `npm run build`.\n" +
